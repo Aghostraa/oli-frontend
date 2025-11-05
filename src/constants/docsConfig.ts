@@ -5,6 +5,7 @@
 
 import React from 'react';
 import TagDocumentation from '../components/docs/TagDocumentation';
+import APIReference from '../components/docs/APIReference';
 
 export interface DocSection {
   id: string;
@@ -176,6 +177,14 @@ export const DOC_SECTIONS: DocSection[] = [
     githubUrl: 'https://raw.githubusercontent.com/openlabelsinitiative/OLI/main/PARTNERSHIPS.md',
     githubPath: 'PARTNERSHIPS.md',
     order: 5,
+    children: []
+  },
+  {
+    id: 'api-reference',
+    title: 'API Reference',
+    description: 'Interactive API documentation with testing capabilities',
+    component: APIReference,
+    order: 6,
     children: []
   }
 ];

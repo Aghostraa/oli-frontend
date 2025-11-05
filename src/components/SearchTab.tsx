@@ -5,22 +5,13 @@ import { fetchAttestationsByContract, Attestation } from '@/services/attestation
 import LoadingAnimation from '@/components/LoadingAnimation';
 import { CHAINS } from '@/constants/chains';
 
-// Define interfaces for the field structure in attestations
-interface AttestationField {
-  name: string;
-  value: {
-    value: string | number | boolean | null;
-    type?: string;
-  };
-}
-
 // Define interface for tag objects
 interface Tag {
   id: string;
   name: string;
   category: string;
   createdAt: number;
-  rawValue: string | number | boolean | null;
+  rawValue: unknown;
 }
 
 // Helper function to format timestamp to readable date
@@ -35,84 +26,70 @@ const formatTimestamp = (timestamp: number): string => {
   });
 };
 
-// Helper function to extract chain ID from attestation
-const extractChainId = (attestation: Attestation): string | undefined => {
-  try {
-    const fields = JSON.parse(attestation.decodedDataJson) as AttestationField[];
-    const chainIdField = fields.find((field) => field.name === 'chain_id');
-    if (chainIdField && chainIdField.value && chainIdField.value.value) {
-      return String(chainIdField.value.value);
-    }
-    return undefined;
-  } catch (error) {
-    console.warn('Could not extract chain ID:', error);
-    return undefined;
-  }
-};
+const BASE_FIELDS = new Set([
+  'attester',
+  'expirationTime',
+  'id',
+  'ipfsHash',
+  'isOffchain',
+  'recipient',
+  'refUID',
+  'revocable',
+  'revocationTime',
+  'revoked',
+  'time',
+  'timeCreated',
+  'txid',
+  'schema_info',
+  'uid',
+  'time_iso',
+  'tags_json',
+  'chain_id',
+  '_parsing_error'
+]);
 
 // Helper function to parse tag data from attestation data
-const parseTagsFromAttestation = (attestation: Attestation & { timeCreated: number | string }): Tag[] => {
+const parseTagsFromAttestation = (attestation: Attestation): Tag[] => {
   const tags: Tag[] = [];
-  
-  try {
-    // Parse the decodedDataJson string which contains an array of fields
-    const fields = JSON.parse(attestation.decodedDataJson) as AttestationField[];
-    
-    if (!Array.isArray(fields)) {
-      console.warn('Expected decodedDataJson to be an array of fields');
-      return tags;
+
+  const tagsJson = attestation.tags_json as Record<string, unknown> | null | undefined;
+
+  const formatValue = (value: unknown) => {
+    if (value === null) return 'null';
+    if (Array.isArray(value)) return value.map(item => String(item)).join(', ');
+    if (typeof value === 'object') return JSON.stringify(value);
+    if (typeof value === 'string') {
+      return value.length > 30 ? `${value.slice(0, 30)}...` : value;
     }
-    
-    // Look for the tags_json field specifically
-    const tagsField = fields.find(field => field.name === 'tags_json');
-    
-    if (tagsField && tagsField.value && typeof tagsField.value.value === 'string') {
-      try {
-        // Parse the nested JSON string in the tags_json field
-        const tagsObject = JSON.parse(tagsField.value.value) as Record<string, string | number | boolean | null>;
-        
-        // Convert each key-value pair in the tags object to a tag
-        Object.entries(tagsObject).forEach(([key, value]) => {
-          tags.push({
-            id: `${attestation.txid || attestation.timeCreated}-${key}`,
-            name: `${key}: ${String(value)}`,
-            category: 'Contract Tag',
-            createdAt: Number(attestation.timeCreated),
-            rawValue: value
-          });
-        });
-      } catch (error) {
-        console.warn('Could not parse tags_json value:', error);
-      }
-    } else {
-      // If no tags_json field found, extract other fields as tags
-      fields.forEach(field => {
-        if (field.name && field.value) {
-          let displayValue = '';
-          
-          if (typeof field.value.value === 'string') {
-            // Truncate long values
-            displayValue = field.value.value.length > 30 
-              ? field.value.value.substring(0, 30) + '...' 
-              : field.value.value;
-          } else {
-            displayValue = JSON.stringify(field.value.value);
-          }
-          
-          tags.push({
-            id: `${attestation.txid || attestation.timeCreated}-${field.name}`,
-            name: `${field.name}: ${displayValue}`,
-            category: 'Attestation Field',
-            createdAt: Number(attestation.timeCreated),
-            rawValue: field.value.value
-          });
-        }
+    return String(value);
+  };
+
+  if (tagsJson && typeof tagsJson === 'object' && !Array.isArray(tagsJson)) {
+    Object.entries(tagsJson).forEach(([key, value]) => {
+      tags.push({
+        id: `${attestation.txid || attestation.timeCreated}-${key}`,
+        name: `${key}: ${formatValue(value)}`,
+        category: 'Contract Tag',
+        createdAt: Number(attestation.timeCreated),
+        rawValue: value
       });
-    }
-  } catch (error) {
-    console.error('Error parsing attestation data:', error);
+    });
+    return tags;
   }
-  
+
+  Object.entries(attestation).forEach(([key, value]) => {
+    if (BASE_FIELDS.has(key)) return;
+
+    tags.push({
+      id: `${attestation.txid || attestation.timeCreated}-${key}`,
+      name: `${key}: ${formatValue(value)}`,
+      category: 'Attestation Field',
+      createdAt: Number(attestation.timeCreated),
+      rawValue: value
+    });
+  }
+  );
+
   return tags;
 };
 
@@ -124,6 +101,7 @@ interface ParsedAttestation {
   revoked: boolean;
   tags: Tag[];
   chainId?: string;
+  schemaInfo?: string;
 }
 
 interface GroupedTags {
@@ -173,17 +151,18 @@ const SearchTab = () => {
         setIsLoading(false);
         return;
       }
-      
+
       // Process each attestation
       const parsedAttestations = rawAttestations.map(attestation => {
         return {
           attester: attestation.attester,
-          timeCreated: Number(attestation.timeCreated), // Convert to number
+          timeCreated: Number(attestation.timeCreated),
           txid: attestation.txid,
           isOffchain: attestation.isOffchain,
           revoked: attestation.revoked,
           tags: parseTagsFromAttestation(attestation),
-          chainId: extractChainId(attestation)
+          chainId: attestation.chain_id || undefined,
+          schemaInfo: attestation.schema_info
         };
       });
       

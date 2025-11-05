@@ -17,7 +17,6 @@ interface ParsedAttestation {
   isOffchain: boolean;
   tags: any[];
   chainId?: string;
-  decodedDataJson: string;
 }
 
 interface ContractCardProps {
@@ -646,8 +645,7 @@ const ContractCard: React.FC<ContractCardProps> = ({ contract, onSelect, onSelec
                       txid: '',
                       isOffchain: false,
                       tags: [],
-                      chainId: contract.chain,
-                      decodedDataJson: ''
+                      chainId: contract.chain
                     });
                   } else {
                     onSelect();

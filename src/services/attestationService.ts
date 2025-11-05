@@ -1,93 +1,62 @@
-// services/attestationService.ts
-import { gql } from '@apollo/client';
-import client from '@/lib/apollo-client';
-import { getAddress } from 'ethers';
+'use client';
 
-// Define the GraphQL query
-export const GET_ATTESTATIONS = gql`
-  query Attestations($where: AttestationWhereInput, $take: Int, $orderBy: [AttestationOrderByWithRelationInput!]) {
-    attestations(where: $where, take: $take, orderBy: $orderBy) {
-      attester
-      decodedDataJson
-      timeCreated
-      txid
-      revoked
-      revocationTime
-      isOffchain
+import type { ExpandedAttestation } from '@openlabels/sdk';
+
+const ATTTESTATIONS_API = '/api/attestations';
+
+export type Attestation = ExpandedAttestation;
+
+interface AttestationApiResponse {
+  count: number;
+  attestations: ExpandedAttestation[];
+}
+
+function buildQuery(params: Record<string, string | number | boolean | undefined | null>): string {
+  const searchParams = new URLSearchParams();
+  Object.entries(params).forEach(([key, value]) => {
+    if (value === undefined || value === null || value === '') {
+      return;
     }
+    searchParams.set(key, String(value));
+  });
+  return searchParams.toString();
+}
+
+async function requestAttestations(params: Record<string, string | number | boolean | undefined | null>): Promise<AttestationApiResponse> {
+  const query = buildQuery(params);
+  const response = await fetch(`${ATTTESTATIONS_API}?${query}`, {
+    method: 'GET',
+    headers: {
+      Accept: 'application/json'
+    },
+    cache: 'no-store'
+  });
+
+  if (!response.ok) {
+    const errorBody = await response.json().catch(() => ({}));
+    const message = (errorBody && errorBody.error) || `Request failed with status ${response.status}`;
+    throw new Error(message);
   }
-`;
 
-// TypeScript interface for the query variables
-export interface AttestationsQueryVariables {
-  where?: {
-    schemaId?: {
-      equals?: string;
-    };
-    attester?: {
-      equals?: string;
-    };
-    recipient?: {
-      equals?: string;
-    };
-    data?: {
-      contains?: string;
-    };
-  };
-  take?: number;
-  orderBy?: Array<{
-    timeCreated?: 'asc' | 'desc';
-  }>;
+  const data = (await response.json()) as AttestationApiResponse;
+  return data;
 }
 
-// TypeScript interface for the query results
-export interface Attestation {
-  attester: string;
-  decodedDataJson: string;
-  timeCreated: string;
-  txid: string;
-  revoked: boolean;
-  revocationTime: string | null;
-  isOffchain: boolean;
+export async function fetchAttestationsByContract(
+  contractAddress: string,
+  cacheBreaker?: { timestamp: number },
+  limit: number = 50
+): Promise<Attestation[]> {
+  const { attestations } = await requestAttestations({
+    recipient: contractAddress,
+    limit,
+    order: 'desc',
+    cacheBreaker: cacheBreaker?.timestamp
+  });
+
+  return attestations;
 }
 
-export interface AttestationsQueryResult {
-  attestations: Attestation[];
-}
-
-// Function to fetch attestations based on contract address
-export async function fetchAttestationsByContract(contractAddress: string, cacheBreaker?: { timestamp: number }, limit: number = 50): Promise<Attestation[]> {
-  try {
-    const variables: AttestationsQueryVariables = {
-      where: {
-        // Required schema ID from your example
-        schemaId: {
-          equals: "0xb763e62d940bed6f527dd82418e146a904e62a297b8fa765c9b3e1f0bc6fdd68"
-        },
-        // Using the contract address as recipient
-        recipient: {
-          // checksum address
-          equals: getAddress(contractAddress)
-        }
-      },
-      take: limit,
-      orderBy: [{ timeCreated: 'desc' }]
-    };
-
-    const { data } = await client.query<AttestationsQueryResult>({
-      query: GET_ATTESTATIONS,
-      variables,
-      fetchPolicy: cacheBreaker ? 'network-only' : 'cache-first'
-    });
-
-    return data.attestations;
-  } catch (error) {
-    console.error('Error fetching attestations:', error);
-    throw error;
-  }
-}
-
-// Function to search attestations with multiple filters
 export async function searchAttestations(options: {
   contractAddress?: string;
   recipient?: string;
@@ -96,42 +65,33 @@ export async function searchAttestations(options: {
   cacheBreaker?: { timestamp: number };
 }): Promise<Attestation[]> {
   const { contractAddress, recipient, dataContains, limit = 50, cacheBreaker } = options;
-  
-  try {
-    // Always include the required schema ID
-    const where: AttestationsQueryVariables['where'] = {
-      schemaId: { 
-        equals: "0xb763e62d940bed6f527dd82418e146a904e62a297b8fa765c9b3e1f0bc6fdd68" 
-      }
-    };
-    
-    if (contractAddress) {
-      where.attester = { equals: contractAddress };
-    }
-    
-    if (recipient) {
-      where.recipient = { equals: recipient };
-    }
-    
-    if (dataContains) {
-      where.data = { contains: dataContains };
-    }
-    
-    const variables: AttestationsQueryVariables = {
-      where,
-      take: limit,
-      orderBy: [{ timeCreated: 'desc' }]
-    };
 
-    const { data } = await client.query<AttestationsQueryResult>({
-      query: GET_ATTESTATIONS,
-      variables,
-      fetchPolicy: cacheBreaker ? 'network-only' : 'cache-first'
-    });
+  const params: Record<string, string | number | boolean | undefined | null> = {
+    limit,
+    order: 'desc',
+    cacheBreaker: cacheBreaker?.timestamp
+  };
 
-    return data.attestations;
-  } catch (error) {
-    console.error('Error searching attestations:', error);
-    throw error;
+  if (contractAddress) {
+    params.attester = contractAddress;
   }
+
+  if (recipient) {
+    params.recipient = recipient;
+  }
+
+  if (dataContains) {
+    params.dataContains = dataContains;
+  }
+
+  const { attestations } = await requestAttestations(params);
+  return attestations;
+}
+
+export async function fetchLatestAttestations(limit: number = 5): Promise<Attestation[]> {
+  const { attestations } = await requestAttestations({
+    limit,
+    order: 'desc'
+  });
+  return attestations;
 }

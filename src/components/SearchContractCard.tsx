@@ -5,20 +5,12 @@ import { Attestation } from '@/services/attestationService';
 import { CHAINS } from '@/constants/chains';
 import { resolveEnsName, getEnscribeUrl, EnsState } from '@/utils/ens';
 
-interface AttestationField {
-  name: string;
-  value: {
-    value: string | number | boolean | null;
-    type?: string;
-  };
-}
-
 interface Tag {
   id: string;
   name: string;
   category: string;
   createdAt: number;
-  rawValue: string | number | boolean | null;
+  rawValue: unknown;
 }
 
 interface ParsedAttestation {
@@ -29,7 +21,6 @@ interface ParsedAttestation {
   revoked: boolean;
   tags: Tag[];
   chainId?: string;
-  decodedDataJson: string;
 }
 
 interface ContractMetadata {
@@ -124,61 +115,125 @@ const SearchContractCard: React.FC<SearchContractCardProps> = ({
     attestation => attestation.attester.toLowerCase() === GROWTHEPIE_ATTESTER.toLowerCase()
   );
 
-  // Parse contract metadata from attestations
-  const getContractMetadata = (): ContractMetadata => {
-    let isContract = false;
-    let contractName: string | undefined;
-    let deploymentTx: string | undefined;
-    let deployerAddress: string | undefined;
-    let deploymentDate: string | undefined;
-    let ownerProject: string | undefined;
-    let usageCategory: string | undefined;
+  const getTagValue = (attestation: Attestation, key: string): unknown => {
+    const tagsJson = attestation.tags_json as Record<string, unknown> | null | undefined;
+    if (tagsJson && Object.prototype.hasOwnProperty.call(tagsJson, key)) {
+      return tagsJson[key];
+    }
+    return (attestation as Record<string, unknown>)[key];
+  };
 
-    attestations.forEach(attestation => {
-      try {
-        const fields = JSON.parse(attestation.decodedDataJson) as AttestationField[];
-        const tagsField = fields.find(field => field.name === 'tags_json');
-        
-        if (tagsField && tagsField.value && typeof tagsField.value.value === 'string') {
-          const tagsObject = JSON.parse(tagsField.value.value) as Record<string, string | number | boolean | null>;
-          
-          // Extract contract metadata
-          if (tagsObject.is_contract === true || tagsObject.is_contract === 'true') {
-            isContract = true;
-          }
-          if (tagsObject.contract_name && typeof tagsObject.contract_name === 'string') {
-            contractName = tagsObject.contract_name;
-          }
-          if (tagsObject.deployment_tx && typeof tagsObject.deployment_tx === 'string') {
-            deploymentTx = tagsObject.deployment_tx;
-          }
-          if (tagsObject.deployer_address && typeof tagsObject.deployer_address === 'string') {
-            deployerAddress = tagsObject.deployer_address;
-          }
-          if (tagsObject.deployment_date && typeof tagsObject.deployment_date === 'string') {
-            deploymentDate = tagsObject.deployment_date;
-          }
-          if (tagsObject.owner_project && typeof tagsObject.owner_project === 'string') {
-            ownerProject = tagsObject.owner_project;
-          }
-          if (tagsObject.usage_category && typeof tagsObject.usage_category === 'string') {
-            usageCategory = tagsObject.usage_category;
-          }
-        }
-      } catch (error) {
-        console.warn('Could not parse contract metadata from attestation:', error);
+  const BASE_FIELDS = new Set([
+    'attester',
+    'expirationTime',
+    'id',
+    'ipfsHash',
+    'isOffchain',
+    'recipient',
+    'refUID',
+    'revocable',
+    'revocationTime',
+    'revoked',
+    'time',
+    'timeCreated',
+    'txid',
+    'schema_info',
+    'uid',
+    'time_iso',
+    'tags_json',
+    'chain_id',
+    '_parsing_error'
+  ]);
+
+  const buildTagsFromAttestation = (attestation: Attestation): Tag[] => {
+    const tags: Tag[] = [];
+    const tagsJson = attestation.tags_json as Record<string, unknown> | null | undefined;
+
+    const formatValue = (value: unknown) => {
+      if (value === null) return 'null';
+      if (Array.isArray(value)) return value.map(item => String(item)).join(', ');
+      if (typeof value === 'object') return JSON.stringify(value);
+      if (typeof value === 'string') {
+        return value.length > 30 ? `${value.slice(0, 30)}...` : value;
       }
+      return String(value);
+    };
+
+    if (tagsJson && typeof tagsJson === 'object' && !Array.isArray(tagsJson)) {
+      Object.entries(tagsJson).forEach(([key, value]) => {
+        tags.push({
+          id: `${attestation.txid || attestation.timeCreated}-${key}`,
+          name: `${key}: ${formatValue(value)}`,
+          category: 'Contract Tag',
+          createdAt: Number(attestation.timeCreated),
+          rawValue: value
+        });
+      });
+      return tags;
+    }
+
+    Object.entries(attestation).forEach(([key, value]) => {
+      if (BASE_FIELDS.has(key)) return;
+      tags.push({
+        id: `${attestation.txid || attestation.timeCreated}-${key}`,
+        name: `${key}: ${formatValue(value)}`,
+        category: 'Attestation Field',
+        createdAt: Number(attestation.timeCreated),
+        rawValue: value
+      });
     });
 
-    return {
-      isContract,
-      contractName,
-      deploymentTx,
-      deployerAddress,
-      deploymentDate,
-      ownerProject,
-      usageCategory
-    };
+    return tags;
+  };
+
+  // Parse contract metadata from attestations
+  const getContractMetadata = (): ContractMetadata => {
+    return attestations.reduce<ContractMetadata>((metadata, attestation) => {
+      const isContractTag = getTagValue(attestation, 'is_contract');
+      if (isContractTag === true || isContractTag === 'true') {
+        metadata.isContract = true;
+      }
+
+      const contractName = getTagValue(attestation, 'contract_name');
+      if (typeof contractName === 'string') {
+        metadata.contractName = contractName;
+      }
+
+      const deploymentTx = getTagValue(attestation, 'deployment_tx');
+      if (typeof deploymentTx === 'string') {
+        metadata.deploymentTx = deploymentTx;
+      }
+
+      const deployerAddress = getTagValue(attestation, 'deployer_address');
+      if (typeof deployerAddress === 'string') {
+        metadata.deployerAddress = deployerAddress;
+      }
+
+      const deploymentDate = getTagValue(attestation, 'deployment_date');
+      if (typeof deploymentDate === 'string') {
+        metadata.deploymentDate = deploymentDate;
+      }
+
+      const ownerProject = getTagValue(attestation, 'owner_project');
+      if (typeof ownerProject === 'string') {
+        metadata.ownerProject = ownerProject;
+      }
+
+      const usageCategory = getTagValue(attestation, 'usage_category');
+      if (typeof usageCategory === 'string') {
+        metadata.usageCategory = usageCategory;
+      }
+
+      return metadata;
+    }, {
+      isContract: false,
+      contractName: undefined,
+      deploymentTx: undefined,
+      deployerAddress: undefined,
+      deploymentDate: undefined,
+      ownerProject: undefined,
+      usageCategory: undefined
+    });
   };
 
   const contractMetadata = getContractMetadata();
@@ -186,16 +241,12 @@ const SearchContractCard: React.FC<SearchContractCardProps> = ({
   // Get chain information from attestations
   const getChainFromAttestations = () => {
     for (const attestation of attestations) {
-      try {
-        const fields = JSON.parse(attestation.decodedDataJson) as AttestationField[];
-        const chainIdField = fields.find((field) => field.name === 'chain_id');
-        if (chainIdField && chainIdField.value && chainIdField.value.value) {
-          const chainId = String(chainIdField.value.value);
-          const chain = CHAINS.find(c => c.caip2 === chainId);
+      const chainId = attestation.chain_id;
+      if (typeof chainId === 'string') {
+        const chain = CHAINS.find(c => c.caip2 === chainId);
+        if (chain) {
           return chain;
         }
-      } catch (error) {
-        console.warn('Could not extract chain ID:', error);
       }
     }
     return null;
@@ -203,55 +254,16 @@ const SearchContractCard: React.FC<SearchContractCardProps> = ({
 
   const chainMetadata = getChainFromAttestations();
 
-  // Extract chain ID from attestation
-  const extractChainId = (attestation: Attestation): string | undefined => {
-    try {
-      const fields = JSON.parse(attestation.decodedDataJson) as AttestationField[];
-      const chainIdField = fields.find((field) => field.name === 'chain_id');
-      if (chainIdField && chainIdField.value && chainIdField.value.value) {
-        return String(chainIdField.value.value);
-      }
-      return undefined;
-    } catch (error) {
-      console.warn('Could not extract chain ID:', error);
-      return undefined;
-    }
-  };
-
   // Parse attestations with full metadata
   const parsedAttestations: ParsedAttestation[] = attestations.map(attestation => {
-    const tags: Tag[] = [];
-    
-    try {
-      const fields = JSON.parse(attestation.decodedDataJson) as AttestationField[];
-      const tagsField = fields.find(field => field.name === 'tags_json');
-      
-      if (tagsField && tagsField.value && typeof tagsField.value.value === 'string') {
-        const tagsObject = JSON.parse(tagsField.value.value) as Record<string, string | number | boolean | null>;
-        
-        Object.entries(tagsObject).forEach(([key, value]) => {
-          tags.push({
-            id: `${attestation.txid || attestation.timeCreated}-${key}`,
-            name: `${key}: ${String(value)}`,
-            category: 'Contract Tag',
-            createdAt: Number(attestation.timeCreated),
-            rawValue: value
-          });
-        });
-      }
-    } catch (error) {
-      console.warn('Could not parse tags from attestation:', error);
-    }
-    
     return {
       attester: attestation.attester,
       timeCreated: Number(attestation.timeCreated),
       txid: attestation.txid,
       isOffchain: attestation.isOffchain,
       revoked: attestation.revoked,
-      tags,
-      chainId: extractChainId(attestation),
-      decodedDataJson: attestation.decodedDataJson
+      tags: buildTagsFromAttestation(attestation),
+      chainId: attestation.chain_id || undefined
     };
   });
 
