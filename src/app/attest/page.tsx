@@ -31,7 +31,10 @@ import UnlabeledContractsList from '@/components/vibe-attest/UnlabeledContractsL
 import VibeAttestSidebar from '@/components/vibe-attest/VibeAttestSidebar';
 import { UnlabeledContract } from '@/types/unlabeledContracts';
 import { CHAINS } from '@/constants/chains';
-import { NETWORK_CONFIG, getNetworkConfig } from '@/constants/eas';
+import { NETWORK_CONFIG, getNetworkConfig, type SupportedChainId } from '@/constants/eas';
+import { useDynamicContext } from '@dynamic-labs/sdk-react-core';
+import { isEthereumWallet } from '@dynamic-labs/ethereum';
+import { switchToAttestationNetwork } from '@/utils/attestationUtils';
 
 // Chain mapping function to convert various formats to CAIP-2
 const mapChainToCAIP2 = (chainInput: string): string | undefined => {
@@ -66,6 +69,7 @@ const mapChainToCAIP2 = (chainInput: string): string | undefined => {
 // Component that uses useSearchParams
 function AttestPageContent() {
   const searchParams = useSearchParams();
+  const { primaryWallet } = useDynamicContext();
   const [selectedContract, setSelectedContract] = useState<UnlabeledContract | null>(null);
   const [sidebarVisible, setSidebarVisible] = useState<boolean>(false);
   const [vibeAttestVisible, setVibeAttestVisible] = useState<boolean>(false);
@@ -227,6 +231,40 @@ function AttestPageContent() {
       }, 500);
     }
   }, []);
+
+  // Switch wallet chain when network is selected in advanced mode
+  useEffect(() => {
+    const switchWalletChain = async () => {
+      // Only switch if advanced mode is enabled and wallet is connected
+      if (!advancedNetworkMode || !primaryWallet) {
+        return;
+      }
+
+      // Verify it's an Ethereum wallet
+      if (!isEthereumWallet(primaryWallet)) {
+        return;
+      }
+
+      // Check if wallet is already on the selected network
+      try {
+        const walletClient = await primaryWallet.getWalletClient();
+        const currentChainId = await walletClient.getChainId();
+        
+        // Only switch if we're not already on the selected network
+        if (currentChainId === selectedNetwork) {
+          return;
+        }
+
+        // Switch to the selected network
+        await switchToAttestationNetwork(primaryWallet, selectedNetwork as SupportedChainId);
+      } catch (error) {
+        // Log error but don't show notification to avoid interrupting user flow
+        console.error('Failed to switch wallet network:', error);
+      }
+    };
+
+    switchWalletChain();
+  }, [advancedNetworkMode, selectedNetwork, primaryWallet]);
 
   return (
     <main className="max-w-7xl mx-auto p-8 space-y-16">
@@ -619,8 +657,8 @@ function AttestPageContent() {
         <AttestationForm 
           prefilledAddress={prefilledAddress}
           prefilledChainId={prefilledChainId}
-          // enableNetworkSelection={advancedNetworkMode}
-          // selectedAttestationNetwork={selectedNetwork}
+          enableNetworkSelection={advancedNetworkMode}
+          selectedAttestationNetwork={selectedNetwork}
         />
         </div>
       </div>
@@ -634,8 +672,8 @@ function AttestPageContent() {
           </p>
         </div>
         <BulkAttestationForm 
-          // enableNetworkSelection={advancedNetworkMode}
-          // selectedAttestationNetwork={selectedNetwork}
+          enableNetworkSelection={advancedNetworkMode}
+          selectedAttestationNetwork={selectedNetwork}
         />
       </div>
 

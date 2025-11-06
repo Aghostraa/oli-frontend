@@ -9,6 +9,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { http } from 'viem';
 import { mainnet, base, linea, arbitrum, optimism } from 'viem/chains';
 import client from '@/lib/apollo-client';
+import { DropdownProvider } from '@/contexts/DropdownContext';
 
 // Create Wagmi config with Base as primary network for OLI attestations
 const config = createConfig({
@@ -146,8 +147,10 @@ export default function Providers({ children }: { children: React.ReactNode }) {
         <QueryClientProvider client={queryClient}>
           <DynamicWagmiConnector>
             <ApolloProvider client={client}>
-              {children}
-              <DynamicUserProfile />
+              <DropdownProvider>
+                {children}
+                <DynamicUserProfile />
+              </DropdownProvider>
             </ApolloProvider>
           </DynamicWagmiConnector>
         </QueryClientProvider>
