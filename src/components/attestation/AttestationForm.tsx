@@ -48,6 +48,7 @@ const AttestationForm: React.FC<AttestationFormProps> = ({
   // Dynamic wallet integration
   const { user, primaryWallet } = useDynamicContext();
   const { capabilities, getSponsorshipMessage } = useDynamicSponsorship();
+  
   const [notification, setNotification] = useState<NotificationType | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [confirmationData, setConfirmationData] = useState<ConfirmationData | null>(null);
@@ -425,6 +426,23 @@ const AttestationForm: React.FC<AttestationFormProps> = ({
             <div className="mt-1 block w-full rounded-md border border-gray-300 shadow-sm bg-gray-50 py-2 pl-3 text-gray-700 text-sm">
               {field.options?.find(opt => opt.value === prefilledChainId)?.label || prefilledChainId}
             </div>
+          ) : field.type === 'select' && ['source_code_verified', 'code_language', 'paymaster_category'].includes(field.id) ? (
+            <select
+              id={field.id}
+              name={field.id}
+              value={getStringValue(formData[field.id])}
+              onChange={(e) => handleChange(field.id, e.target.value)}
+              required={field.required}
+              className={`mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm text-gray-900 bg-white py-2 pl-3 pr-10 ${
+                errors[field.id] ? 'border-red-500' : ''
+              }`}
+            >
+              {field.options?.map(option => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
           ) : field.type === 'select' && (
             <div className="dropdown-wrapper" style={{ position: 'relative', zIndex: 50 }}>
               <CustomDropdown

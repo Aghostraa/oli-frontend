@@ -14,6 +14,7 @@ import {
   RefreshCw
 } from 'lucide-react';
 import { useDynamicContext, useWalletOptions, useUserWallets, useSwitchWallet } from '@dynamic-labs/sdk-react-core';
+import { formatAddress, isCoinbaseSmartWallet, getExplorerUrl } from '@/utils/walletUtils';
 
 const WalletConnectEnhanced = () => {
   const { 
@@ -37,12 +38,7 @@ const WalletConnectEnhanced = () => {
   const walletName = primaryWallet?.connector?.name;
 
   // Check if it's Coinbase Smart Wallet for gas sponsorship
-  const isCoinbaseSmartWallet = (
-    walletName === 'Coinbase' || 
-    walletName === 'Coinbase Smart Wallet' ||
-    walletName === 'coinbase_smart_wallet' ||
-    walletName?.toLowerCase() === 'coinbase'
-  ) || false;
+  const isCoinbase = isCoinbaseSmartWallet(walletName);
 
   useEffect(() => {
     // Close dropdown when clicking outside
@@ -63,7 +59,7 @@ const WalletConnectEnhanced = () => {
   // Check if wallet has enough fees for attestation (>$1 worth of ETH on Base)
   useEffect(() => {
     const checkFees = async () => {
-      if (primaryWallet && isOpen && hasEnoughFees === null && !isCoinbaseSmartWallet) {
+      if (primaryWallet && isOpen && hasEnoughFees === null && !isCoinbase) {
         setIsCheckingFees(true);
         try {
           const walletBalance = await primaryWallet.getBalance();
@@ -115,12 +111,7 @@ const WalletConnectEnhanced = () => {
     };
 
     checkFees();
-  }, [primaryWallet, isOpen, hasEnoughFees, isCoinbaseSmartWallet]);
-
-  const formatAddress = (address: string): string => {
-    if (!address) return '';
-    return `${address.slice(0, 6)}...${address.slice(-4)}`;
-  };
+  }, [primaryWallet, isOpen, hasEnoughFees, isCoinbase]);
 
   const copyAddress = async () => {
     if (!address) return;
@@ -135,7 +126,7 @@ const WalletConnectEnhanced = () => {
 
   const openInExplorer = () => {
     if (!address) return;
-    const explorerUrl = `https://basescan.org/address/${address}`;
+    const explorerUrl = getExplorerUrl(address, 8453); // Base chain
     window.open(explorerUrl, '_blank');
   };
 
@@ -212,7 +203,7 @@ const WalletConnectEnhanced = () => {
         className="inline-flex items-center gap-3 px-5 py-3 rounded-xl bg-gradient-to-r from-blue-500 via-purple-600 to-indigo-600 text-white hover:from-blue-600 hover:via-purple-700 hover:to-indigo-700 transition-all duration-300 shadow-lg hover:shadow-xl transform hover:scale-105"
       >
         <div className="flex items-center gap-2">
-          {isCoinbaseSmartWallet ? (
+          {isCoinbase ? (
             <Shield className="w-5 h-5" />
           ) : (
             <Wallet className="w-5 h-5" />
@@ -231,10 +222,10 @@ const WalletConnectEnhanced = () => {
               <div className="flex items-center justify-between">
                 <div>
                   <div className="text-xs text-gray-500 uppercase tracking-wide font-medium">
-                    {isCoinbaseSmartWallet ? 'Smart Wallet' : 'Connected Wallet'}
+                    {isCoinbase ? 'Smart Wallet' : 'Connected Wallet'}
                   </div>
                   <div className="text-base font-semibold text-gray-900 mt-1 flex items-center gap-2">
-                    {isCoinbaseSmartWallet ? (
+                    {isCoinbase ? (
                       <>
                         <Shield className="w-5 h-5 text-blue-600" />
                         <span>Coinbase Smart Wallet</span>
@@ -259,7 +250,7 @@ const WalletConnectEnhanced = () => {
             <div className="px-6 py-4 border-b border-gray-100">
               <div className="flex items-center justify-between mb-3">
                 <div className="text-xs text-gray-500 uppercase tracking-wide font-medium">Transaction Fees</div>
-                {!isCoinbaseSmartWallet && (
+                {!isCoinbase && (
                   <button
                     onClick={refreshFeeCheck}
                     className="p-1 hover:bg-gray-100 rounded transition-colors"
@@ -270,7 +261,7 @@ const WalletConnectEnhanced = () => {
                 )}
               </div>
               
-              {isCoinbaseSmartWallet ? (
+              {isCoinbase ? (
                 /* Coinbase Smart Wallet - Gas Sponsored */
                 <div className="flex items-center gap-3">
                   <div className="bg-green-50 p-3 rounded-xl">

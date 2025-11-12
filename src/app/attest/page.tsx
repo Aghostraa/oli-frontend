@@ -31,7 +31,10 @@ import UnlabeledContractsList from '@/components/vibe-attest/UnlabeledContractsL
 import VibeAttestSidebar from '@/components/vibe-attest/VibeAttestSidebar';
 import { UnlabeledContract } from '@/types/unlabeledContracts';
 import { CHAINS } from '@/constants/chains';
-// import { NETWORK_CONFIG, getNetworkConfig } from '@/constants/eas';
+import { NETWORK_CONFIG, getNetworkConfig, type SupportedChainId } from '@/constants/eas';
+import { useDynamicContext } from '@dynamic-labs/sdk-react-core';
+import { isEthereumWallet } from '@dynamic-labs/ethereum';
+import { switchToAttestationNetwork } from '@/utils/attestationUtils';
 
 // Chain mapping function to convert various formats to CAIP-2
 const mapChainToCAIP2 = (chainInput: string): string | undefined => {
@@ -66,14 +69,15 @@ const mapChainToCAIP2 = (chainInput: string): string | undefined => {
 // Component that uses useSearchParams
 function AttestPageContent() {
   const searchParams = useSearchParams();
+  const { primaryWallet } = useDynamicContext();
   const [selectedContract, setSelectedContract] = useState<UnlabeledContract | null>(null);
   const [sidebarVisible, setSidebarVisible] = useState<boolean>(false);
   const [vibeAttestVisible, setVibeAttestVisible] = useState<boolean>(false);
   
   // Advanced Network Mode - disabled by default to keep simple Base workflow
-  // const [advancedNetworkMode, setAdvancedNetworkMode] = useState<boolean>(false);
+  const [advancedNetworkMode, setAdvancedNetworkMode] = useState<boolean>(false);
   // Selected attestation network for advanced mode (default to Base)
-  // const [selectedNetwork, setSelectedNetwork] = useState<number>(8453);
+  const [selectedNetwork, setSelectedNetwork] = useState<number>(8453);
   
   // Extract URL parameters for prefilling the form
   const [prefilledAddress, setPrefilledAddress] = useState<string | undefined>(undefined);
@@ -228,6 +232,40 @@ function AttestPageContent() {
     }
   }, []);
 
+  // Switch wallet chain when network is selected in advanced mode
+  useEffect(() => {
+    const switchWalletChain = async () => {
+      // Only switch if advanced mode is enabled and wallet is connected
+      if (!advancedNetworkMode || !primaryWallet) {
+        return;
+      }
+
+      // Verify it's an Ethereum wallet
+      if (!isEthereumWallet(primaryWallet)) {
+        return;
+      }
+
+      // Check if wallet is already on the selected network
+      try {
+        const walletClient = await primaryWallet.getWalletClient();
+        const currentChainId = await walletClient.getChainId();
+        
+        // Only switch if we're not already on the selected network
+        if (currentChainId === selectedNetwork) {
+          return;
+        }
+
+        // Switch to the selected network
+        await switchToAttestationNetwork(primaryWallet, selectedNetwork as SupportedChainId);
+      } catch (error) {
+        // Log error but don't show notification to avoid interrupting user flow
+        console.error('Failed to switch wallet network:', error);
+      }
+    };
+
+    switchWalletChain();
+  }, [advancedNetworkMode, selectedNetwork, primaryWallet]);
+
   return (
     <main className="max-w-7xl mx-auto p-8 space-y-16">
       {/* Introduction Section */}
@@ -256,7 +294,7 @@ function AttestPageContent() {
             </div>
           </div>
 
-          {/* Advanced Network Mode Toggle - Temporarily disabled
+          {/* Advanced Network Mode Toggle */}
           <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl p-6 shadow-sm">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-start space-x-3 flex-1">
@@ -370,7 +408,6 @@ function AttestPageContent() {
               </div>
             )}
           </div>
-          */}
         </div>
         
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
@@ -620,8 +657,8 @@ function AttestPageContent() {
         <AttestationForm 
           prefilledAddress={prefilledAddress}
           prefilledChainId={prefilledChainId}
-          // enableNetworkSelection={advancedNetworkMode}
-          // selectedAttestationNetwork={selectedNetwork}
+          enableNetworkSelection={advancedNetworkMode}
+          selectedAttestationNetwork={selectedNetwork}
         />
         </div>
       </div>
@@ -635,8 +672,8 @@ function AttestPageContent() {
           </p>
         </div>
         <BulkAttestationForm 
-          // enableNetworkSelection={advancedNetworkMode}
-          // selectedAttestationNetwork={selectedNetwork}
+          enableNetworkSelection={advancedNetworkMode}
+          selectedAttestationNetwork={selectedNetwork}
         />
       </div>
 

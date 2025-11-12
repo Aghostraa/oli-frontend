@@ -3,6 +3,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeRaw from 'rehype-raw';
 import { useSearchParams, useRouter } from 'next/navigation';
+import { Key, ExternalLink } from 'lucide-react';
 import FaqScript from '../FaqScript';
 import { 
   DOC_SECTIONS,
@@ -876,6 +877,24 @@ const EnhancedDocsLayout: React.FC<EnhancedDocsLayoutProps> = ({ className = "" 
                           }
                         >
                           Add new tag_id
+                        </ActionButton>
+                      </>
+                    ) : activeSection === 'api-reference' ? (
+                      <>
+                        <ActionButton
+                          onClick={() => {
+                            window.location.href = '/developer';
+                          }}
+                          icon={<Key className="w-5 h-5" />}
+                        >
+                          Get API Key
+                        </ActionButton>
+                        <ActionButton
+                          href="https://api.openlabelsinitiative.org/openapi.json"
+                          external
+                          icon={<ExternalLink className="w-5 h-5" />}
+                        >
+                          OpenAPI Spec
                         </ActionButton>
                       </>
                     ) : (

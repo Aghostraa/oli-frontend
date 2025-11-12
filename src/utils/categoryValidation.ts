@@ -1,6 +1,6 @@
 // src/utils/categoryValidation.ts
 import { ValidationWarning } from '../types/attestation';
-import { CATEGORIES, VALID_CATEGORY_IDS, CATEGORY_MAP } from '../constants/categories';
+import { CATEGORIES, VALID_CATEGORY_IDS } from '../constants/categories';
 
 // Calculate Levenshtein distance for fuzzy matching
 const levenshteinDistance = (str1: string, str2: string): number => {
@@ -252,7 +252,18 @@ export const validateCategoryField = async (field: string, value: string): Promi
 
 // Get category display info for UI
 export const getCategoryDisplayInfo = (categoryId: string): { name: string; description: string; mainCategory: string } | null => {
-  return CATEGORY_MAP[categoryId] || null;
+  // Find category in CATEGORIES
+  for (const mainCategory of CATEGORIES) {
+    const category = mainCategory.categories.find(cat => cat.category_id === categoryId);
+    if (category) {
+      return {
+        name: category.name,
+        description: category.description,
+        mainCategory: mainCategory.main_category_name
+      };
+    }
+  }
+  return null;
 };
 
 // Get all categories grouped by main category for dropdowns

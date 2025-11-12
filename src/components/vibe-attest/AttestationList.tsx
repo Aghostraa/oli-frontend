@@ -3,19 +3,11 @@
 import React, { useState } from 'react';
 import { Attestation } from '@/services/attestationService';
 
-interface AttestationField {
-  name: string;
-  value: {
-    value: string | number | boolean | null;
-    type?: string;
-  };
-}
-
 interface Tag {
   id: string;
   name: string;
   category: string;
-  rawValue: string | number | boolean | null;
+  rawValue: unknown;
 }
 
 interface ParsedAttestation {
@@ -25,7 +17,6 @@ interface ParsedAttestation {
   isOffchain: boolean;
   tags: Tag[];
   chainId?: string;
-  decodedDataJson: string;
 }
 
 interface AttestationListProps {
@@ -56,87 +47,66 @@ const AttestationList: React.FC<AttestationListProps> = ({
     return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
   };
 
+  const BASE_FIELDS = new Set([
+    'attester',
+    'expirationTime',
+    'id',
+    'ipfsHash',
+    'isOffchain',
+    'recipient',
+    'refUID',
+    'revocable',
+    'revocationTime',
+    'revoked',
+    'time',
+    'timeCreated',
+    'txid',
+    'schema_info',
+    'uid',
+    'time_iso',
+    'tags_json',
+    'chain_id',
+    '_parsing_error'
+  ]);
+
   // Parse tags from attestation data
   const parseTagsFromAttestation = (attestation: Attestation): Tag[] => {
     const tags: Tag[] = [];
-    
-    try {
-      // Parse the decodedDataJson string which contains an array of fields
-      const fields = JSON.parse(attestation.decodedDataJson) as AttestationField[];
-      
-      if (!Array.isArray(fields)) {
-        return tags;
-      }
-      
-      // Look for the tags_json field specifically
-      const tagsField = fields.find(field => field.name === 'tags_json');
-      
-      if (tagsField && tagsField.value && typeof tagsField.value.value === 'string') {
-        try {
-          // Parse the nested JSON string in the tags_json field
-          const tagsObject = JSON.parse(tagsField.value.value) as Record<string, string | number | boolean | null>;
-          
-          // Convert each key-value pair in the tags object to a tag
-          Object.entries(tagsObject).forEach(([key, value]) => {
-            tags.push({
-              id: `${attestation.txid || attestation.timeCreated}-${key}`,
-              name: `${key}: ${String(value)}`,
-              category: 'Contract Tag',
-              rawValue: value
-            });
-          });
-        } catch (error) {
-          console.warn('Could not parse tags_json value:', error);
-        }
-      } else {
-        // If no tags_json field found, extract other fields as tags
-        fields.forEach(field => {
-          if (field.name && field.value) {
-            // Skip certain technical fields that aren't meaningful as tags
-            if (['chain_id', 'version', 'schema_id'].includes(field.name)) {
-              return;
-            }
-            
-            let displayValue = '';
-            
-            if (typeof field.value.value === 'string') {
-              // Truncate long values
-              displayValue = field.value.value.length > 20 
-                ? field.value.value.substring(0, 20) + '...' 
-                : field.value.value;
-            } else {
-              displayValue = JSON.stringify(field.value.value);
-            }
-            
-            tags.push({
-              id: `${attestation.txid || attestation.timeCreated}-${field.name}`,
-              name: `${field.name}: ${displayValue}`,
-              category: 'Attestation Field',
-              rawValue: field.value.value
-            });
-          }
-        });
-      }
-    } catch (error) {
-      console.error('Error parsing attestation data:', error);
-    }
-    
-    return tags;
-  };
+    const tagsJson = attestation.tags_json as Record<string, unknown> | null | undefined;
 
-  // Extract chain ID from attestation
-  const extractChainId = (attestation: Attestation): string | undefined => {
-    try {
-      const fields = JSON.parse(attestation.decodedDataJson) as AttestationField[];
-      const chainIdField = fields.find((field) => field.name === 'chain_id');
-      if (chainIdField && chainIdField.value && chainIdField.value.value) {
-        return String(chainIdField.value.value);
+    const formatValue = (value: unknown) => {
+      if (value === null) return 'null';
+      if (Array.isArray(value)) return value.map(item => String(item)).join(', ');
+      if (typeof value === 'object') return JSON.stringify(value);
+      if (typeof value === 'string') {
+        return value.length > 20 ? `${value.slice(0, 20)}...` : value;
       }
-      return undefined;
-    } catch (error) {
-      console.warn('Could not extract chain ID:', error);
-      return undefined;
+      return String(value);
+    };
+
+    if (tagsJson && typeof tagsJson === 'object' && !Array.isArray(tagsJson)) {
+      Object.entries(tagsJson).forEach(([key, value]) => {
+        tags.push({
+          id: `${attestation.txid || attestation.timeCreated}-${key}`,
+          name: `${key}: ${formatValue(value)}`,
+          category: 'Contract Tag',
+          rawValue: value
+        });
+      });
+      return tags;
     }
+
+    Object.entries(attestation).forEach(([key, value]) => {
+      if (BASE_FIELDS.has(key)) return;
+      tags.push({
+        id: `${attestation.txid || attestation.timeCreated}-${key}`,
+        name: `${key}: ${formatValue(value)}`,
+        category: 'Attestation Field',
+        rawValue: value
+      });
+    });
+
+    return tags;
   };
 
   // Parse attestations
@@ -148,8 +118,7 @@ const AttestationList: React.FC<AttestationListProps> = ({
       txid: attestation.txid,
       isOffchain: attestation.isOffchain,
       tags,
-      chainId: extractChainId(attestation),
-      decodedDataJson: attestation.decodedDataJson
+      chainId: attestation.chain_id || undefined
     };
   });
 

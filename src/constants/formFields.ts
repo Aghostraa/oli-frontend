@@ -41,6 +41,7 @@ export const initialFormState = {
   deployment_tx: '',
   deployer_address: '',
   deployment_date: '',
+  deployment_block: '',
   is_safe_contract: undefined,
   erc_type: '',
   erc20_name: '',
@@ -54,9 +55,15 @@ export const initialFormState = {
   audit: '',
   contract_monitored: '',
   source_code_verified: '',
+  code_language: '',
+  code_compiler: '',
   paymaster_category: '',
   is_bundler: undefined,
   is_paymaster: undefined,
+  etf_ticker: '',
+  track_outflow: undefined,
+  'is_blacklist.usdc': undefined,
+  'is_blacklist.usdt': undefined,
   _comment: '',
   _source: ''
 };
@@ -189,6 +196,14 @@ export const formFields: FormField[] = [
     visibility: 'advanced'
   },
   {
+    id: 'deployment_block',
+    label: 'Deployment Block',
+    type: 'number',
+    tooltipKey: 'deployment_block',
+    visibility: 'advanced',
+    placeholder: 'Block number'
+  },
+  {
     id: 'is_safe_contract',
     label: 'Is Multisig',
     type: 'radio',
@@ -285,8 +300,8 @@ export const formFields: FormField[] = [
     type: 'text',
     tooltipKey: 'audit',
     visibility: 'advanced',
-    placeholder: 'https://... Link to audit report',
-    validator: validateURL
+    placeholder: 'JSON array: [{"url":"https://...","title":"Audit Title","date":"2024-01-01"}]',
+    // Note: Audit is an array type in schema, but we'll handle it as JSON string for form input
   },
   {
     id: 'contract_monitored',
@@ -300,11 +315,39 @@ export const formFields: FormField[] = [
   {
     id: 'source_code_verified',
     label: 'Verified Source Code',
-    type: 'text',
+    type: 'select',
     tooltipKey: 'source_code_verified',
     visibility: 'advanced',
-    placeholder: 'https://... Link to verified source code',
-    validator: validateURL
+    options: [
+      { value: '', label: 'Select verification service' },
+      { value: 'sourcify', label: 'Sourcify' },
+      { value: 'blockscout', label: 'Blockscout' },
+      { value: 'etherscan', label: 'Etherscan' }
+    ]
+  },
+  {
+    id: 'code_language',
+    label: 'Programming Language',
+    type: 'select',
+    tooltipKey: 'code_language',
+    visibility: 'advanced',
+    options: [
+      { value: '', label: 'Select a language' },
+      { value: 'solidity', label: 'Solidity' },
+      { value: 'vyper', label: 'Vyper' },
+      { value: 'yul', label: 'Yul' },
+      { value: 'fe', label: 'Fe' },
+      { value: 'huff', label: 'Huff' },
+      { value: 'stylus', label: 'Stylus' }
+    ]
+  },
+  {
+    id: 'code_compiler',
+    label: 'Compiler',
+    type: 'text',
+    tooltipKey: 'code_compiler',
+    visibility: 'advanced',
+    placeholder: 'e.g., solc 0.8.20'
   },
   {
     id: 'paymaster_category',
@@ -335,6 +378,47 @@ export const formFields: FormField[] = [
     label: 'Is Paymaster',
     type: 'radio',
     tooltipKey: 'is_paymaster',
+    visibility: 'advanced',
+    options: [
+      { value: 'true', label: 'Yes' },
+      { value: 'false', label: 'No' }
+    ]
+  },
+  {
+    id: 'etf_ticker',
+    label: 'ETF Ticker',
+    type: 'text',
+    tooltipKey: 'etf_ticker',
+    visibility: 'advanced',
+    placeholder: 'e.g., BTC'
+  },
+  {
+    id: 'track_outflow',
+    label: 'ETF Track Outflow',
+    type: 'radio',
+    tooltipKey: 'track_outflow',
+    visibility: 'advanced',
+    options: [
+      { value: 'true', label: 'Yes' },
+      { value: 'false', label: 'No' }
+    ]
+  },
+  {
+    id: 'is_blacklist.usdc',
+    label: 'USDC Blacklist',
+    type: 'radio',
+    tooltipKey: 'is_blacklist.usdc',
+    visibility: 'advanced',
+    options: [
+      { value: 'true', label: 'Yes' },
+      { value: 'false', label: 'No' }
+    ]
+  },
+  {
+    id: 'is_blacklist.usdt',
+    label: 'USDT Blacklist',
+    type: 'radio',
+    tooltipKey: 'is_blacklist.usdt',
     visibility: 'advanced',
     options: [
       { value: 'true', label: 'Yes' },

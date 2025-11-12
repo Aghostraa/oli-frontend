@@ -98,6 +98,7 @@ const BulkAttestationForm: React.FC<BulkAttestationFormProps> = ({
   
   // Dynamic wallet integration
   const { user, primaryWallet } = useDynamicContext();
+  
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [notification, setNotification] = useState<NotificationType | null>(null);
@@ -1097,12 +1098,12 @@ const BulkAttestationForm: React.FC<BulkAttestationFormProps> = ({
               value={value}
               onChange={(e) => updateRow(rowIndex, column.id, e.target.value)}
               className={baseInputClasses}
-              list="valid-categories"
+              list={`valid-categories-${rowIndex}`}
             />
             {value && VALID_CATEGORY_IDS.includes(value) && (
               <div className="absolute right-2 top-1/2 -translate-y-1/2 text-green-500">✓</div>
             )}
-            <datalist id="valid-categories">
+            <datalist id={`valid-categories-${rowIndex}`}>
               {VALID_CATEGORY_IDS.map(categoryId => (
                 <option key={categoryId} value={categoryId} />
               ))}

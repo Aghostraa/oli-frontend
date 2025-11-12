@@ -2,82 +2,107 @@
 
 import React, { useState, useEffect } from 'react';
 import { ethers } from 'ethers';
-import { gql } from '@apollo/client';
-import client from '@/lib/apollo-client';
+import { CHAINS } from '@/constants/chains';
 // Import the loading animation component
 import LoadingAnimation from '@/components/LoadingAnimation';
 
-interface Attestation {
+interface LeaderboardRow {
   attester: string;
-  _count: {
-    _all: number;
-  };
+  unique_attestations: number;
 }
 
 interface EnsNames {
   [key: string]: string | null;
 }
 
-const ETH_NODE_URL="https://rpc.mevblocker.io/fast"
+const ETH_NODE_URL = 'https://rpc.mevblocker.io/fast';
 
-const ATTESTATION_QUERY = gql`
-  query GroupByAttestation($by: [AttestationScalarFieldEnum!]!, $where: AttestationWhereInput, $orderBy: [AttestationOrderByWithAggregationInput!], $take: Int) {
-    groupByAttestation(by: $by, where: $where, orderBy: $orderBy, take: $take) {
-      attester
-      _count {
-        _all
-      }
-    }
+async function fetchLeaderboard(
+  options: { limit?: number; chainId?: string } = {},
+  signal?: AbortSignal
+) {
+  const params = new URLSearchParams();
+  if (options.limit) params.set('limit', String(options.limit));
+  if (options.chainId) params.set('chainId', options.chainId);
+
+  const query = params.toString();
+  const response = await fetch(query ? `/api/leaderboard?${query}` : '/api/leaderboard', {
+    headers: {
+      Accept: 'application/json'
+    },
+    signal,
+    cache: 'no-store'
+  });
+
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw new Error(body.error || `Leaderboard request failed (${response.status})`);
   }
-`;
+
+  const data = await response.json();
+  
+  // Handle API response format: { count: number, results: LeaderboardRow[] }
+  if (data.results && Array.isArray(data.results)) {
+    return data.results as LeaderboardRow[];
+  }
+  
+  // Handle array directly (backward compatibility)
+  if (Array.isArray(data)) {
+    return data as LeaderboardRow[];
+  }
+  
+  throw new Error('Unexpected API response format');
+}
 
 const LeaderboardTable: React.FC = () => {
-  const [data, setData] = useState<Attestation[]>([]);
+  const [data, setData] = useState<LeaderboardRow[]>([]);
   const [ensNames, setEnsNames] = useState<EnsNames>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [chainFilter, setChainFilter] = useState<string>('');
 
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const { data: queryData } = await client.query({
-          query: ATTESTATION_QUERY,
-          variables: {
-            by: ["attester"],
-            where: {
-              schemaId: {
-                equals: "0xb763e62d940bed6f527dd82418e146a904e62a297b8fa765c9b3e1f0bc6fdd68"
-              },
-              revoked: {
-                equals: false
-              }
-            },
-            orderBy: [
-              {
-                _count: {
-                  attester: "desc"
-                }
-              }
-            ],
-            take: 50
-          }
-        });
+    const controller = new AbortController();
 
-        setData(queryData.groupByAttestation);
-        resolveEnsNames(queryData.groupByAttestation);
+    const loadLeaderboard = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const results = await fetchLeaderboard(
+          {
+            limit: 20,
+            chainId: chainFilter || undefined
+          },
+          controller.signal
+        );
+
+        setData(results);
+        setEnsNames({});
+        await resolveEnsNames(results, controller.signal);
       } catch (err) {
-        console.error('Error fetching data:', err);
-        setError(err instanceof Error ? err.message : 'Failed to fetch data');
+        if ((err instanceof DOMException && err.name === 'AbortError') || controller.signal.aborted) {
+          return;
+        }
+        console.error('Error fetching leaderboard:', err);
+        setError(err instanceof Error ? err.message : 'Failed to fetch leaderboard');
+      } finally {
+        if (!controller.signal.aborted) {
+          setLoading(false);
+        }
       }
     };
 
-    fetchData();
-  }, []);
+    loadLeaderboard();
 
-  const resolveEnsNames = async (attesters: Attestation[]) => {
+    return () => {
+      controller.abort();
+    };
+  }, [chainFilter]);
+
+  const resolveEnsNames = async (attesters: LeaderboardRow[], signal?: AbortSignal) => {
     try {
-        const provider = new ethers.JsonRpcProvider(ETH_NODE_URL);
-      
+      const provider = new ethers.JsonRpcProvider(ETH_NODE_URL);
+
       const ensPromises = attesters.map(async (item) => {
         try {
           const name = await provider.lookupAddress(item.attester);
@@ -90,16 +115,16 @@ const LeaderboardTable: React.FC = () => {
 
       const resolvedNames = await Promise.all(ensPromises);
       const ensMap = Object.fromEntries(resolvedNames);
-      
-      setEnsNames(ensMap);
+
+      if (!signal?.aborted) {
+        setEnsNames(ensMap);
+      }
     } catch (err) {
       console.error('Error resolving ENS names:', err);
-    } finally {
-      setLoading(false);
     }
   };
 
-  const maxCount = Math.max(...data.map(item => item._count._all));
+  const maxCount = data.length ? Math.max(...data.map(item => item.unique_attestations)) : 0;
 
   const truncateAddress = (address: string): string => {
     return `${address.slice(0, 6)}...${address.slice(-4)}`;
@@ -115,16 +140,30 @@ const LeaderboardTable: React.FC = () => {
 
   return (
     <div className="max-w-4xl mx-auto p-8 bg-white rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.05)] relative">
-      <div className="flex justify-between items-center mb-8">
-        <h2 className="text-2xl font-bold text-gray-900">Top Labellers</h2>
-        <a 
-          href="https://base.easscan.org/schema/view/0xb763e62d940bed6f527dd82418e146a904e62a297b8fa765c9b3e1f0bc6fdd68" 
-          target="_blank" 
-          rel="noopener noreferrer" 
-          className="px-5 py-2.5 bg-gradient-to-r from-blue-400 via-purple-500 to-pink-500 text-white rounded-xl hover:opacity-90 transition-opacity duration-200 text-sm font-semibold"
-        >
-          Schema on EAS
-        </a>
+      <div className="flex flex-col gap-6 mb-8 lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <h2 className="text-2xl font-bold text-gray-900">Top Labellers</h2>
+          <p className="text-sm text-gray-500 mt-1">
+            Ranked by unique attestations. Use the filter to scope by chain.
+          </p>
+        </div>
+        <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
+          <label className="flex flex-col text-xs font-medium text-gray-600">
+            Chain
+            <select
+              value={chainFilter}
+              onChange={(event) => setChainFilter(event.target.value)}
+              className="mt-1 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
+            >
+              <option value="">All Chains</option>
+              {CHAINS.map(chain => (
+                <option key={chain.caip2} value={chain.caip2}>
+                  {chain.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
       </div>
       
       <div className="overflow-x-auto">
@@ -164,13 +203,16 @@ const LeaderboardTable: React.FC = () => {
                 <td className="py-4 px-6">
                   <div className="flex flex-col items-end gap-2">
                     <span className="font-semibold text-gray-900">
-                      {item._count._all.toLocaleString()}
+                      {item.unique_attestations.toLocaleString()}
+                    </span>
+                    <span className="text-xs text-gray-500">
+                      unique attestations
                     </span>
                     <div className="w-60 bg-gray-100 rounded-full h-2">
                       <div
                         className="bg-gradient-to-r from-blue-400 via-purple-500 to-pink-500 h-2 rounded-full transition-all duration-500"
                         style={{
-                          width: `${(item._count._all / maxCount) * 100}%`
+                          width: `${maxCount ? (item.unique_attestations / maxCount) * 100 : 0}%`
                         }}
                       />
                     </div>
