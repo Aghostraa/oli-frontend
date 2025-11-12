@@ -8,7 +8,6 @@ import LoadingAnimation from '@/components/LoadingAnimation';
 
 interface LeaderboardRow {
   attester: string;
-  label_count: number;
   unique_attestations: number;
 }
 
@@ -19,12 +18,11 @@ interface EnsNames {
 const ETH_NODE_URL = 'https://rpc.mevblocker.io/fast';
 
 async function fetchLeaderboard(
-  options: { limit?: number; order?: 'tags' | 'attestations'; chainId?: string } = {},
+  options: { limit?: number; chainId?: string } = {},
   signal?: AbortSignal
 ) {
   const params = new URLSearchParams();
   if (options.limit) params.set('limit', String(options.limit));
-  if (options.order) params.set('order', options.order);
   if (options.chainId) params.set('chainId', options.chainId);
 
   const query = params.toString();
@@ -41,7 +39,19 @@ async function fetchLeaderboard(
     throw new Error(body.error || `Leaderboard request failed (${response.status})`);
   }
 
-  return (await response.json()) as { count: number; results: LeaderboardRow[] };
+  const data = await response.json();
+  
+  // Handle API response format: { count: number, results: LeaderboardRow[] }
+  if (data.results && Array.isArray(data.results)) {
+    return data.results as LeaderboardRow[];
+  }
+  
+  // Handle array directly (backward compatibility)
+  if (Array.isArray(data)) {
+    return data as LeaderboardRow[];
+  }
+  
+  throw new Error('Unexpected API response format');
 }
 
 const LeaderboardTable: React.FC = () => {
@@ -49,7 +59,6 @@ const LeaderboardTable: React.FC = () => {
   const [ensNames, setEnsNames] = useState<EnsNames>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [order, setOrder] = useState<'tags' | 'attestations'>('tags');
   const [chainFilter, setChainFilter] = useState<string>('');
 
   useEffect(() => {
@@ -59,10 +68,9 @@ const LeaderboardTable: React.FC = () => {
       setLoading(true);
       setError(null);
       try {
-        const { results } = await fetchLeaderboard(
+        const results = await fetchLeaderboard(
           {
             limit: 20,
-            order,
             chainId: chainFilter || undefined
           },
           controller.signal
@@ -89,7 +97,7 @@ const LeaderboardTable: React.FC = () => {
     return () => {
       controller.abort();
     };
-  }, [order, chainFilter]);
+  }, [chainFilter]);
 
   const resolveEnsNames = async (attesters: LeaderboardRow[], signal?: AbortSignal) => {
     try {
@@ -116,7 +124,7 @@ const LeaderboardTable: React.FC = () => {
     }
   };
 
-  const maxCount = data.length ? Math.max(...data.map(item => item.label_count)) : 0;
+  const maxCount = data.length ? Math.max(...data.map(item => item.unique_attestations)) : 0;
 
   const truncateAddress = (address: string): string => {
     return `${address.slice(0, 6)}...${address.slice(-4)}`;
@@ -136,21 +144,10 @@ const LeaderboardTable: React.FC = () => {
         <div>
           <h2 className="text-2xl font-bold text-gray-900">Top Labellers</h2>
           <p className="text-sm text-gray-500 mt-1">
-            Ranked by total tags contributed. Use the filters to switch sorting or scope by chain.
+            Ranked by unique attestations. Use the filter to scope by chain.
           </p>
         </div>
         <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
-          <label className="flex flex-col text-xs font-medium text-gray-600">
-            Order By
-            <select
-              value={order}
-              onChange={(event) => setOrder(event.target.value as 'tags' | 'attestations')}
-              className="mt-1 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
-            >
-              <option value="tags">Total Tags</option>
-              <option value="attestations">Unique Attestations</option>
-            </select>
-          </label>
           <label className="flex flex-col text-xs font-medium text-gray-600">
             Chain
             <select
@@ -166,14 +163,6 @@ const LeaderboardTable: React.FC = () => {
               ))}
             </select>
           </label>
-          <a 
-            href="https://base.easscan.org/schema/view/0xb763e62d940bed6f527dd82418e146a904e62a297b8fa765c9b3e1f0bc6fdd68" 
-            target="_blank" 
-            rel="noopener noreferrer" 
-            className="px-5 py-2.5 bg-gradient-to-r from-blue-400 via-purple-500 to-pink-500 text-white rounded-xl hover:opacity-90 transition-opacity duration-200 text-sm font-semibold text-center"
-          >
-            Schema on EAS
-          </a>
         </div>
       </div>
       
@@ -214,16 +203,16 @@ const LeaderboardTable: React.FC = () => {
                 <td className="py-4 px-6">
                   <div className="flex flex-col items-end gap-2">
                     <span className="font-semibold text-gray-900">
-                      {item.label_count.toLocaleString()}
+                      {item.unique_attestations.toLocaleString()}
                     </span>
                     <span className="text-xs text-gray-500">
-                      {item.unique_attestations.toLocaleString()} unique attestations
+                      unique attestations
                     </span>
                     <div className="w-60 bg-gray-100 rounded-full h-2">
                       <div
                         className="bg-gradient-to-r from-blue-400 via-purple-500 to-pink-500 h-2 rounded-full transition-all duration-500"
                         style={{
-                          width: `${maxCount ? (item.label_count / maxCount) * 100 : 0}%`
+                          width: `${maxCount ? (item.unique_attestations / maxCount) * 100 : 0}%`
                         }}
                       />
                     </div>
