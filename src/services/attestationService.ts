@@ -1,6 +1,6 @@
 'use client';
 
-import type { ExpandedAttestation } from '@openlabels/sdk';
+import type { ExpandedAttestation } from '@openlabels/oli-sdk';
 
 const ATTTESTATIONS_API = '/api/attestations';
 
