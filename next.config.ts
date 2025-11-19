@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  transpilePackages: ['@openlabels/sdk'],
+  transpilePackages: ['@openlabels/oli-sdk'],
   images: {
     domains: ['api.growthepie.xyz'],
   },

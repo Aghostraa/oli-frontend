@@ -1,6 +1,6 @@
 'use server';
 
-import { OLIClient } from '@openlabels/sdk';
+import { OLIClient } from '@openlabels/oli-sdk';
 
 let oliClient: OLIClient | null = null;
 let configuredApiKey: string | undefined;
