@@ -507,6 +507,34 @@ const BASE_CHAINS: ChainMetadata[] = [
     description: 'Soneium is an Ethereum Layer 2 blockchain network that provides scalable and efficient transaction processing with ETH as its native currency.'
   },
   {
+    id: 'megaeth_testnet_v2',
+    name: '🐰 MegaETH Testnet v2',
+    shortName: 'Timothy',
+    caip2: 'eip155:6343',
+    chainId: 6343,
+    colors: {
+      light: ['#6366F1', '#818CF8'],
+      dark: ['#818CF8', '#A5B4FC'],
+      darkTextOnBackground: false
+    },
+    logo: null,
+    description: 'MegaETH Testnet v2 - Featured promotional testnet for MegaETH'
+  },
+  {
+    id: 'megaeth_testnet',
+    name: '🐰 MegaETH Testnet v1',
+    shortName: 'Carrot',
+    caip2: 'eip155:6342',
+    chainId: 6342,
+    colors: {
+      light: ['#6366F1', '#818CF8'],
+      dark: ['#818CF8', '#A5B4FC'],
+      darkTextOnBackground: false
+    },
+    logo: null,
+    description: 'MegaETH Testnet V1 - Featured promotional testnet for MegaETH'
+  },
+  {
     id: 'any',
     name: 'Any EVM Chain',
     shortName: 'Any EVM Chain',
