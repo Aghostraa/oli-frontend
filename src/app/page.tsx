@@ -3,83 +3,9 @@
 import type { FC } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { useState, useEffect } from 'react';
-
-// Interface for project types
-interface Project {
-  name: string;
-  url: string;
-  color: string; // For gradient colors
-}
+import { PRODUCTS_USING_OLI, DEFAULT_PRODUCT_COLOR } from '@/constants/products';
 
 const HomePage: FC = () => {
-  // State to store projects from GitHub README
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  // Function to fetch projects from the GitHub README
-  useEffect(() => {
-    const fetchProjects = async () => {
-      try {
-        // Fetch README directly from GitHub using the provided endpoint
-        const response = await fetch('https://raw.githubusercontent.com/openlabelsinitiative/OLI/refs/heads/main/README.md');
-        const readmeContent = await response.text();
-        
-        // Find the Products Using OLI section
-        const productsSection = findProductsSection(readmeContent);
-        
-        // Parse the projects from that section
-        const parsedProjects = parseProjects(productsSection);
-        
-        setProjects(parsedProjects);
-        setLoading(false);
-      } catch (error) {
-        console.error("Error fetching projects:", error);
-        setLoading(false);
-        // No fallback - if fetch fails, projects array will remain empty
-      }
-    };
-
-    // Function to find the "Products Using OLI" section in the README
-    function findProductsSection(text: string): string {
-      const productsSectionRegex = /## Products Using OLI\s+([\s\S]*?)(?=##|$)/;
-      const match = text.match(productsSectionRegex);
-      
-      if (match && match[1]) {
-        return match[1].trim();
-      }
-      
-      return "";
-    }
-
-    // Function to parse projects from the section text
-    function parseProjects(sectionText: string): Project[] {
-      if (!sectionText) return [];
-      
-      const projects = [];
-      // Match markdown list items with links: "- [Project Name](URL) - Description"
-      const projectRegex = /- \[(.*?)\]\((.*?)\)(?: - (.*))?/g;
-      
-      let match;
-      // Use the gradient from "Using the OLI Label Pool" section
-      const uniformColor = "from-blue-400 via-purple-500 to-pink-500";
-      
-      while ((match = projectRegex.exec(sectionText)) !== null) {
-        const name = match[1].trim();
-        const url = match[2].trim();
-        
-        projects.push({
-          name,
-          url,
-          color: uniformColor
-        });
-      }
-      
-      return projects;
-    }
-
-    fetchProjects();
-  }, []);
 
   return (
     <div className="min-h-screen bg-white">
@@ -709,121 +635,77 @@ const HomePage: FC = () => {
     </div>
     
     <div className="grid grid-cols-1 md:grid-cols-3 gap-8" style={{ gridAutoRows: '1fr' }}>
-      {loading ? (
-        // Loading state
-        <div className="col-span-3 text-center py-8">
-          <div className="flex justify-center">
-            <svg className="animate-spin h-10 w-10 text-indigo-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-            </svg>
-          </div>
-          <p className="text-gray-500 mt-4">Loading projects...</p>
-        </div>
-      ) : (
-        // Display projects dynamically
-        <>
-          {projects.map((project, index) => {
-            // Map project URLs to images - add more mappings as needed
-            const projectImages: { [key: string]: string } = {
-              'https://labels.growthepie.com/': '/project-images/growthepie-labels.png',
-              'https://www.growthepie.com/applications/': '/project-images/growthepie-applications.png',
-              'https://agx.app/': '/project-images/agx.png',
-              'https://repo.sourcify.dev/': '/project-images/sourcify.png',
-              'https://app.enscribe.xyz/': '/project-images/enscribe-explorer.png',
-            };
-                        
-            // Check if we have an image for this project
-            const hasImage = projectImages[project.url] !== undefined;
-            
-            return (
-              <a 
-                key={index}
-                href={project.url} 
-                target="_blank" 
-                rel="noopener noreferrer" 
-                className="bg-white rounded-xl overflow-hidden shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1 group flex flex-col h-full"
-              >
-                {hasImage ? (
-                  // Show image if available
-                  <div className="relative h-48 w-full overflow-hidden">
-                    <Image 
-                      src={projectImages[project.url]} 
-                      alt={`${project.name} screenshot`}
-                      width={400}
-                      height={320}
-                      className="object-cover w-full h-full transition-transform duration-500 group-hover:scale-105"
-                    />
-                  </div>
-                ) : (
-                  // Use the current gradient background when no image is available
-                  <div className={`h-48 bg-gradient-to-br ${project.color} relative overflow-hidden group-hover:bg-opacity-90 transition-all duration-300`}>
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      {/* Decorative circles in background */}
-                      <div className="absolute -top-12 -right-12 w-40 h-40 rounded-full bg-white opacity-10 transform group-hover:scale-110 transition-transform duration-500"></div>
-                      <div className="absolute -bottom-12 -left-12 w-32 h-32 rounded-full bg-white opacity-10 transform group-hover:scale-110 transition-transform duration-500"></div>
-                      
-                      <div className="bg-white bg-opacity-20 backdrop-blur-sm rounded-lg p-4 transform hover:scale-105 transition-all duration-300 z-10">
-                        <div className="text-white text-center">
-                          <div className="text-2xl font-bold mb-1">{project.name.split(' ')[0]}</div>
-                          <div className="text-sm">Visit website</div>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-                <div className="p-6 flex-grow flex flex-col">
-                  <h3 className="text-xl font-semibold text-gray-900 mb-1 flex-grow">{project.name}</h3>
-                  <div className="flex items-center text-indigo-600 text-sm font-medium mt-auto">
-                    Visit project
-                    <svg className="ml-1 w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
-                    </svg>
-                  </div>
-                </div>
-              </a>
-            );
-          })}
-
-          {/* Add Your Project Card - Always shown at the end */}
+      {/* Display products from local configuration */}
+      {PRODUCTS_USING_OLI.map((product, index) => {
+        const hasImage = !!product.image;
+        const gradientColor = product.color || DEFAULT_PRODUCT_COLOR;
+        
+        return (
           <a 
-            href="https://github.com/openlabelsinitiative/OLI?tab=readme-ov-file#products-using-oli" 
+            key={index}
+            href={product.url} 
             target="_blank" 
             rel="noopener noreferrer" 
             className="bg-white rounded-xl overflow-hidden shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1 group flex flex-col h-full"
           >
-            <div className="h-48 bg-white relative overflow-hidden">
-              {/* Diagonal gradient background */}
-              <div className="absolute inset-0 bg-gradient-to-r from-blue-400 via-purple-500 to-pink-500"></div>
-              
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="bg-white shadow-lg rounded-xl p-6 transform group-hover:scale-105 transition-all duration-300 z-10">
-                  <div className="text-gray-700 text-center">
-                    <div className="flex items-center justify-center mb-2">
-                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" className="w-8 h-8 mr-2 text-indigo-600">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-                      </svg>
-                      <span className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-500 to-purple-600">Add Yours</span>
-                    </div>
-                    <div className="mt-2 text-sm">
-                      Join the OLI ecosystem
+            {hasImage ? (
+              // Show image if available
+              <div className="relative h-48 w-full overflow-hidden">
+                <Image 
+                  src={product.image!} 
+                  alt={`${product.name} screenshot`}
+                  width={400}
+                  height={320}
+                  className="object-cover w-full h-full transition-transform duration-500 group-hover:scale-105"
+                />
+              </div>
+            ) : (
+              // Use gradient background when no image is available
+              <div className={`h-48 bg-gradient-to-br ${gradientColor} relative overflow-hidden group-hover:bg-opacity-90 transition-all duration-300`}>
+                <div className="absolute inset-0 flex items-center justify-center">
+                  {/* Decorative circles in background */}
+                  <div className="absolute -top-12 -right-12 w-40 h-40 rounded-full bg-white opacity-10 transform group-hover:scale-110 transition-transform duration-500"></div>
+                  <div className="absolute -bottom-12 -left-12 w-32 h-32 rounded-full bg-white opacity-10 transform group-hover:scale-110 transition-transform duration-500"></div>
+                  
+                  <div className="bg-white bg-opacity-20 backdrop-blur-sm rounded-lg p-4 transform hover:scale-105 transition-all duration-300 z-10">
+                    <div className="text-white text-center">
+                      <div className="text-2xl font-bold mb-1">{product.name.split(' ')[0]}</div>
+                      <div className="text-sm">Visit website</div>
                     </div>
                   </div>
                 </div>
               </div>
-            </div>
+            )}
             <div className="p-6 flex-grow flex flex-col">
-              <h3 className="text-xl font-semibold text-gray-900 mb-1 flex-grow">Add Your Project</h3>
+              <h3 className="text-xl font-semibold text-gray-900 mb-1 flex-grow">{product.name}</h3>
+              {product.description && (
+                <p className="text-sm text-gray-600 mb-2">{product.description}</p>
+              )}
               <div className="flex items-center text-indigo-600 text-sm font-medium mt-auto">
-                Submit to GitHub
+                Visit project
                 <svg className="ml-1 w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
                 </svg>
               </div>
             </div>
           </a>
-        </>
-      )}
+        );
+      })}
+    </div>
+    
+    {/* Add Your Project Button - Outside grid */}
+    <div className="flex justify-center mt-6">
+      <a 
+        href="mailto:ahoura@openlabelsinitiative.org?subject=Add My Project to OLI" 
+        target="_blank" 
+        rel="noopener noreferrer" 
+        className="inline-flex items-center px-4 py-2 text-sm font-medium text-indigo-600 hover:text-indigo-500 transition-colors duration-200"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" className="w-4 h-4 mr-1">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+        </svg>
+        Add Your Project
+      </a>
     </div>
   </div>
 </div>
