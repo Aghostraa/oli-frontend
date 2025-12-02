@@ -140,14 +140,6 @@ const TagDocumentation: React.FC<TagDocumentationProps> = ({ showHeader = true }
     }
   }, [searchParams, loading, router]);
 
-  // Handler to show usage category with expanded view
-  const handleShowUsageCategory = () => {
-    // Just set the URL parameter and let the useEffect handle the rest
-    const params = new URLSearchParams(searchParams.toString());
-    params.set('viewUsageCategory', 'true');
-    router.replace(`?${params.toString()}`, { scroll: false });
-  };
-
   useEffect(() => {
     const fetchData = async () => {
       try {
