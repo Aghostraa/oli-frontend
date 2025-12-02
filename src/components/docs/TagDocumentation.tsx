@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import yaml from 'js-yaml';
+import { useSearchParams, useRouter } from 'next/navigation';
 import {
   DocHeader,
   DocContent,
@@ -100,6 +101,9 @@ interface TagDocumentationProps {
 }
 
 const TagDocumentation: React.FC<TagDocumentationProps> = ({ showHeader = true }) => {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  
   const [tagDefinitions, setTagDefinitions] = useState<TagDefinition[]>([]);
   const [categoryGroups, setCategoryGroups] = useState<CategoryGroup[]>([]);
   const [loading, setLoading] = useState(true);
@@ -108,6 +112,33 @@ const TagDocumentation: React.FC<TagDocumentationProps> = ({ showHeader = true }
   const [expandedCategories, setExpandedCategories] = useState(false);
   const [selectedType, setSelectedType] = useState<string | null>(null);
   const [selectedCreator, setSelectedCreator] = useState<string | null>(null);
+
+  // Check for URL parameters to auto-expand usage category
+  useEffect(() => {
+    const viewUsageCategory = searchParams.get('viewUsageCategory');
+    if (viewUsageCategory === 'true' && !loading) {
+      // Clear any existing filters
+      setSelectedType(null);
+      setSelectedCreator(null);
+      
+      // Set the search term and expand categories
+      setExpandedCategories(true);
+      setSearchTerm('usage_category');
+      
+      // Clear the URL parameter after processing to avoid re-triggering
+      const params = new URLSearchParams(searchParams.toString());
+      params.delete('viewUsageCategory');
+      router.replace(`?${params.toString()}`, { scroll: false });
+      
+      // Scroll to usage_category after a delay to ensure content is rendered
+      setTimeout(() => {
+        const usageCategoryElement = document.getElementById('tag-usage_category');
+        if (usageCategoryElement) {
+          usageCategoryElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      }, 600);
+    }
+  }, [searchParams, loading, router]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -141,30 +172,38 @@ const TagDocumentation: React.FC<TagDocumentationProps> = ({ showHeader = true }
           return acc;
         }, [] as Array<{ name: string; lineNumber: number }>);
 
-        // Second pass: associate categories with their groups
-        categoryData.categories.forEach(category => {
-          const categoryLine = lines.findIndex(line => line.includes(`category_id: ${category.category_id}`));
-          
-          // Find the appropriate group for this category
-          const groupIndex = groupHeaders.findIndex((header, index) => {
-            const nextHeader = groupHeaders[index + 1];
-            return categoryLine > header.lineNumber && 
-                   (!nextHeader || categoryLine < nextHeader.lineNumber);
+        // If no group headers found, create a default group with all categories
+        if (groupHeaders.length === 0) {
+          groups.push({
+            name: 'All Categories',
+            categories: categoryData.categories || []
           });
+        } else {
+          // Second pass: associate categories with their groups
+          categoryData.categories.forEach(category => {
+            const categoryLine = lines.findIndex(line => line.includes(`category_id: ${category.category_id}`));
+            
+            // Find the appropriate group for this category
+            const groupIndex = groupHeaders.findIndex((header, index) => {
+              const nextHeader = groupHeaders[index + 1];
+              return categoryLine > header.lineNumber && 
+                     (!nextHeader || categoryLine < nextHeader.lineNumber);
+            });
 
-          if (groupIndex >= 0) {
-            const groupName = groupHeaders[groupIndex].name;
-            const existingGroup = groups.find(g => g.name === groupName);
-            if (existingGroup) {
-              existingGroup.categories.push(category);
-            } else {
-              groups.push({
-                name: groupName,
-                categories: [category]
-              });
+            if (groupIndex >= 0) {
+              const groupName = groupHeaders[groupIndex].name;
+              const existingGroup = groups.find(g => g.name === groupName);
+              if (existingGroup) {
+                existingGroup.categories.push(category);
+              } else {
+                groups.push({
+                  name: groupName,
+                  categories: [category]
+                });
+              }
             }
-          }
-        });
+          });
+        }
 
         setTagDefinitions(tagData.tags || []);
         setCategoryGroups(groups);
@@ -381,15 +420,16 @@ const TagDocumentation: React.FC<TagDocumentationProps> = ({ showHeader = true }
       <div className="space-y-6">
         <div className="grid gap-6">
           {filteredTags.map((tag) => (
-            <TagCard
-              key={tag.tag_id}
-              title={tag.name}
-              tagId={tag.tag_id}
-              type={tag.schema.type}
-              creator={tag.creator}
-            >
-              {renderTagContent(tag)}
-            </TagCard>
+            <div key={tag.tag_id} id={`tag-${tag.tag_id}`}>
+              <TagCard
+                title={tag.name}
+                tagId={tag.tag_id}
+                type={tag.schema.type}
+                creator={tag.creator}
+              >
+                {renderTagContent(tag)}
+              </TagCard>
+            </div>
           ))}
         </div>
       </div>

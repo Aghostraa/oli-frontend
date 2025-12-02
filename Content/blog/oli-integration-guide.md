@@ -1,18 +1,18 @@
 ---
-title: "A Developer's Guide to the Open Labels Initiative (OLI): SDKs, Bulk Attestations, and Metadata"
+title: "An Integration Guide to OLI: SDKs, Bulk Attestations, and Metadata"
 excerpt: "Learn how to integrate OLI into your workflow using the Python SDK, build enriched web components with the JS SDK, and bulk attest via the frontend."
-date: "2025-11-28"
+date: "2025-12-02"
 author: "OLI Team"
 authorSocial:
   twitter: "https://twitter.com/open_labels"
   telegram: "https://t.me/olilabels"
-tags: ["developer", "sdk", "guide", "python", "typescript"]
+tags: ["developer", "integration", "sdk", "guide", "python", "typescript"]
 featured: true
 readingTime: 8
 seo:
-  title: "Developer's Guide to OLI: SDKs & Bulk Attestations"
+  title: "Integration Guide to OLI: SDKs & Bulk Attestations"
   description: "Complete guide to integrating Open Labels Initiative. Learn to use the Python SDK, TypeScript SDK, and Frontend Bulk Upload tools for EVM address labeling."
-  keywords: ["open labels initiative", "oli sdk", "python sdk", "typescript sdk", "bulk attestation", "evm labeling", "blockchain development"]
+  keywords: ["open labels initiative","integration", "oli sdk", "python sdk", "typescript sdk", "bulk attestation", "evm labeling", "blockchain development"]
 ---
 
 The Open Labels Initiative (OLI) is building the trust layer for the EVM ecosystem. Whether you're a developer building a block explorer, a data analyst tracking dapp usage, or a project owner wanting to claim your contracts, OLI provides the tools you need.
@@ -21,7 +21,7 @@ In this guide, we'll cover the full workflow:
 1.  **Registering Your Project**: The essential first step to create your identity.
 2.  **Python SDK**: For backend scripts and data pipelines.
 3.  **JavaScript/TypeScript SDK**: For building frontend applications that consume OLI metadata.
-4.  **Frontend Bulk Upload**: A "no-code" way to submit a maximum of 50 labels in on go onchain via CSV, featuring our automatic validations and quick fixes.
+4.  **Frontend Bulk Upload**: A "no-code" way to submit a maximum of 50 labels onchain in one go via CSV, featuring our automatic validations and quick fixes.
 
 ---
 
@@ -72,6 +72,8 @@ pip install oli-python
 Here is a polished script that initializes the client, validates your tags against the schema, and performs a bulk submission. Note how we use the `owner_project` slug we just registered.
 
 You can simply use the following snippet using Jupiter Notebook [here](https://github.com/openlabelsinitiative/OLI/blob/main/2_label_pool/tooling_write/python/main.ipynb). (Ready to use) 
+
+Check our [Label Schema](https://www.openlabelsinitiative.org/docs?section=tag-documentation) docs to inform yourself on all the possible tags and value sets, most importantly the `usage_category` [ValueSet](https://www.openlabelsinitiative.org/docs?section=tag-documentation&viewUsageCategory=true).
 
 ```python
 from oli import OLI
@@ -148,56 +150,91 @@ The `@openlabels/oli-sdk` for JavaScript/TypeScript allows you to fetch attestat
 ### Example: Gas Leaderboard Web Component
 
 ```typescript
-import { OLIClient } from '@openlabels/oli-sdk';
+  import { OLIClient } from '@openlabels/oli-sdk';
+  import type { LabelItem } from '@openlabels/oli-sdk/types/api';
 
-class GasLeaderboardWithMetadata extends HTMLElement {
-  private oli: OLIClient;
-  private data: any[] = []; // Your raw data
+  const ADDRESSES = [
+    '0x4752ba5DBc23f44D87826276BF6Fd6b1C372aD24',
+    '0x2626664c2603336E57B271c5C0b26F421741e481',
+    '0x6fF5693b99212Da76ad316178A184AB56D299b43'
+  ];
+  const CHAIN_ID = 'eip155:8453';        // Base; set to undefined to search all
+  chains
+  const LIMIT_PER_ADDRESS = 10;          // How many labels to fetch per address
+  const INCLUDE_ALL = true;              // Include older/revoked labels so we
+  don’t miss tags
+  const REQUIRED_TAGS = ['usage_category', 'owner_project']; // Fields we must
+  have
 
-  constructor() {
-    super();
-    this.oli = new OLIClient();
-    // ... initialization code ...
+  const parseTime = (l: LabelItem) => (l.time ? Date.parse(l.time) : 0) || 0;
+
+  // Group labels by attestation (attester|time|chain) so we can pick one “payload” per address
+  function groupByAttestation(labels: LabelItem[]): LabelItem[][] {
+    const groups = new Map<string, LabelItem[]>();
+    for (const label of labels) {
+      const key = `${(label.attester ?? '').toLowerCase()}|${label.time ?? ''}|
+  ${label.chain_id ?? ''}`;
+      (groups.get(key) ?? groups.set(key, []).get(key)!)?.push(label);
+    }
+    return [...groups.values()].sort((a, b) => parseTime(b[0]) -
+  parseTime(a[0])); // newest first
   }
 
-  async connectedCallback() {
-    await this.oli.init(); // Load tag definitions
-    await this.enrichAddresses();
-    this.render();
+  // Prefer the newest attestation that contains all required tags; otherwise use the newest attestation
+  function pickGroupWithTags(groups: LabelItem[][], required: string[]) {
+    return groups.find(g => required.every(tag => g.some(l => l.tag_id ===
+  tag))) ?? groups[0] ?? [];
   }
 
-  async enrichAddresses() {
-    // 1. Extract addresses to fetch
-    const addresses = this.data.map(d => d.address);
+  // Get the newest value for a tag within the chosen attestation
+  const getTag = (labels: LabelItem[], id: string) =>
+    labels.find(l => l.tag_id === id)?.tag_value ?? '-';
 
-    // 2. Bulk fetch metadata from OLI
-    // This is much more efficient than individual requests
-    const results = await this.oli.rest.getAttestationsForAddresses(addresses);
+  async function main() {
+    const apiKey = process.env.OLI_API_KEY;
+    if (!apiKey) throw new Error('Set OLI_API_KEY');
 
-    // 3. Merge metadata into your local state
-    this.data = this.data.map(entry => {
-      const oliData = results.find(r => 
-        r.address.toLowerCase() === entry.address.toLowerCase()
-      );
-      
-      // Extract specific tags we care about
-      const getTag = (id: string) => oliData?.labels?.find(l => l.tag_id === id)?.tag_value || '-';
+    const oli = new OLIClient({ api: { apiKey } });
+    await oli.init();
 
-      return {
-        ...entry,
-        usageCategory: getTag('usage_category'),
-        ownerProject: getTag('owner_project'),
-        contractName: getTag('contract_name'),
-        attester: oliData?.attester ? this.oli.helpers.formatAddress(oliData.attester, 'short') : '-'
-      };
+    const results = await oli.api.getAttestationsForAddresses(ADDRESSES, {
+      chain_id: CHAIN_ID,
+      limit_per_address: LIMIT_PER_ADDRESS,
+      include_all: INCLUDE_ALL
     });
+
+    for (const { address, labels } of results) {
+      const groups = groupByAttestation(labels);
+      const selected = pickGroupWithTags(groups, REQUIRED_TAGS);
+      const attester = selected.find(l => l.attester)?.attester ?? '';
+      const attesterShort = attester ? oli.helpers.formatAddress(attester,
+  'short') : '-';
+
+      console.log(
+        [
+          `address=${address}`,
+          `usage=${getTag(selected, 'usage_category')}`,
+          `project=${getTag(selected, 'owner_project')}`,
+          `name=${getTag(selected, 'contract_name')}`,
+          `attester=${attesterShort}`
+        ].join(' | ')
+      );
+    }
   }
 
-  // ... render logic ...
-}
-customElements.define('gas-leaderboard', GasLeaderboardWithMetadata);
+  main().catch(err => {
+    console.error(err);
+    process.exit(1);
+  });
 ```
+ Why this approach:
 
+  - Single bulk call to /labels/bulk for all addresses.
+  - Fetches multiple labels per address and picks the newest attestation that
+    actually has the required tags (usage/project), so you don’t lose fields when
+    the latest attestation omits them.
+  - Falls back to newest attestation if required tags don’t exist.
+  - Keeps the log output simple for front-end enrichment.
 ---
 
 ## 4. Frontend Guide: Bulk Uploads

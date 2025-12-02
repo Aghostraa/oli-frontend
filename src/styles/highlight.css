@@ -1,0 +1,4 @@
+/* github-dark.css style extracted for usage without @import in globals.css if needed, 
+   but since next.js supports css imports from node_modules, the @import should work. 
+   Just in case, we ensure the file exists. */
+

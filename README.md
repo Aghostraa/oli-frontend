@@ -117,8 +117,10 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 - [Enscribe](https://app.enscribe.xyz/) - Tool to Assign ENS to contracts
 - [growthepie Labels](https://labels.growthepie.com/) - Label explorer and analytics platform
 - [growthepie Applications](https://www.growthepie.com/applications/) - L2 analytics platform
+- [Blockscout](https://www.blockscout.com/) - Block explorer providing contract metadata
 - [AGX](https://agx.app/) - Blockchain analytics platform
 - [Sourcify](https://repo.sourcify.dev/) - Contract verification service
+
 
 ## Supporters
 

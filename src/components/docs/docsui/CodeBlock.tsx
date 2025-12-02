@@ -82,11 +82,13 @@ const CodeBlock: React.FC<CodeBlockProps> = ({
             fontSize: '0.875rem',
             lineHeight: '1.5',
             borderRadius: showHeader ? '0 0 0.5rem 0.5rem' : '0.5rem',
-            background: '#0d1117'
+            background: '#0d1117',
+            color: '#c9d1d9', // Default text color for the code block
           }}
           codeTagProps={{
             style: {
-              fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace'
+              fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Consolas, "Liberation Mono", Menlo, monospace',
+              backgroundColor: 'transparent' // Ensure code tags don't have a background that overrides the container
             }
           }}
           lineNumberStyle={{

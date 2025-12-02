@@ -20,3 +20,4 @@ export { default as UrlDisplay } from './UrlDisplay';
 export { default as ParquetExports } from './ParquetExports';
 export { default as CodeExamples } from './CodeExamples';
 export { default as YamlViewer } from './YamlViewer';
+export { default as MermaidDiagram } from './MermaidDiagram';

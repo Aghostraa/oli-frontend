@@ -7,7 +7,7 @@ authorSocial:
   twitter: "https://twitter.com/ahoura_az"
   telegram: "https://t.me/aghostraa"
 tags: ["announcement", "partnerships", "security", "ens", "blockchain"]
-featured: true
+featured: false
 seo:
   title: "OLI and Enscribe Integration - Web3 Security UX Solution"
   description: "Learn how OLI and Enscribe are solving blind signing by creating a foundational stack for onchain trust and security in Web3 applications."
