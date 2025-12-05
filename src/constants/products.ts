@@ -14,13 +14,13 @@ export interface Product {
  */
 export const PRODUCTS_USING_OLI: Product[] = [
   {
-    name: 'GrowthThePie Labels',
+    name: 'growthepie Labels',
     url: 'https://labels.growthepie.com/',
     image: '/project-images/growthepie-labels.png',
     description: 'Explore labeled contracts and applications',
   },
   {
-    name: 'GrowthThePie Applications',
+    name: 'growthepie Applications',
     url: 'https://www.growthepie.com/applications/',
     image: '/project-images/growthepie-applications.png',
     description: 'Discover applications using OLI labels',
