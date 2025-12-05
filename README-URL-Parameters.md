@@ -39,6 +39,8 @@ Standard EVM chain IDs:
 - `167000` - Taiko Alethia
 - `1923` - Swellchain
 - `7777777` - Zora
+- `6343` - 🐰 MegaETH testnet v2 (Timothy)
+- `6342` - 🐰 MegaETH Testnet v1 (Carrot)
 
 ### 2. Chain Names
 Full network names (case-insensitive):
@@ -55,6 +57,8 @@ Full network names (case-insensitive):
 - `taiko` or `taiko alethia` - Taiko Alethia
 - `swellchain` or `swell` - Swellchain
 - `zora` - Zora
+- `megaeth testnet v2` or `megaeth testnet v2` or `timothy` - 🐰 Mega testnet v2 (Timothy)
+- `megaeth testnet v1` or `carrot` - 🐰 MegaETH Testnet v1 (Carrot)
 
 ### 3. Short Names/Aliases
 Common abbreviations:
