@@ -91,6 +91,8 @@ function AttestPageContent() {
 
   // Extract URL parameters on component mount
   useEffect(() => {
+    if (!searchParams) return;
+
     // Get address parameter (can be 'address' or 'contract')
     const addressParam = searchParams.get('address') || searchParams.get('contract');
     // Get chain parameter (can be 'chain' or 'chainId')

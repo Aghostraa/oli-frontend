@@ -113,6 +113,10 @@ function SearchContent() {
 
   // Initialize from URL parameters
   useEffect(() => {
+    if (!searchParams) {
+      return;
+    }
+
     const addressParam = searchParams.get('address') || searchParams.get('contract');
     const chainParam = searchParams.get('chain') || searchParams.get('chainId');
     

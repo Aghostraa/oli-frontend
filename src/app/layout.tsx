@@ -8,13 +8,16 @@ import { CookieConsentProvider } from '@/contexts/CookieConsentContext';
 import ClientCookieComponents from '@/app/ClientCookieComponents';
 
 // Define default metadata
+const siteUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://openlabelsinitiative.org';
+
 export const metadata: Metadata = {
+  metadataBase: new URL(siteUrl),
   title: 'Open Labels Initiative',
   description: 'A standardized framework and data model for EVM address labeling',
   openGraph: {
     title: 'Open Labels Initiative',
     description: 'A standardized framework and data model for EVM address labeling',
-    url: 'https://openlabelsinitiative.org',
+    url: siteUrl,
     siteName: 'Open Labels Initiative',
     images: [
       {
@@ -34,6 +37,9 @@ export const metadata: Metadata = {
     creator: '@open_labels',
     images: ['/og-image.png'],
   },
+  alternates: {
+    canonical: siteUrl,
+  },
 };
 
 export default function RootLayout({
@@ -41,6 +47,30 @@ export default function RootLayout({
 }: {
   children: React.ReactNode;
 }) {
+  const webSiteLd = {
+    '@context': 'https://schema.org',
+    '@type': 'WebSite',
+    url: siteUrl,
+    name: 'Open Labels Initiative',
+    potentialAction: {
+      '@type': 'SearchAction',
+      target: `${siteUrl}/search?query={search_term_string}`,
+      'query-input': 'required name=search_term_string'
+    }
+  };
+
+  const organizationLd = {
+    '@context': 'https://schema.org',
+    '@type': 'Organization',
+    url: siteUrl,
+    name: 'Open Labels Initiative',
+    sameAs: [
+      'https://x.com/open_labels',
+      'https://github.com/openlabelsinitiative'
+    ],
+    logo: `${siteUrl}/og-image.png`
+  };
+
   return (
     <html lang="en">
       <body>
@@ -55,6 +85,12 @@ export default function RootLayout({
             
             {/* Import cookie consent components */}
             <ClientCookieComponents />
+
+            {/* Site-level structured data for search and organization */}
+            <script
+              type="application/ld+json"
+              dangerouslySetInnerHTML={{ __html: JSON.stringify([webSiteLd, organizationLd]) }}
+            />
           </Providers>
         </CookieConsentProvider>
       </body>

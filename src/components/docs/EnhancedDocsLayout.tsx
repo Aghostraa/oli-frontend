@@ -1,3 +1,5 @@
+ 'use client';
+
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -111,7 +113,7 @@ const cacheImage = async (src: string): Promise<string> => {
 const EnhancedDocsLayout: React.FC<EnhancedDocsLayoutProps> = ({ className = "" }) => {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const sectionParam = searchParams.get('section');
+  const sectionParam = searchParams?.get('section') || null;
   
   const [loading, setLoading] = useState<{ [key: string]: boolean }>({});
   const [content, setContent] = useState<{ [key: string]: string }>({});
@@ -132,6 +134,10 @@ const EnhancedDocsLayout: React.FC<EnhancedDocsLayoutProps> = ({ className = "" 
 
   // Update URL when active section changes
   useEffect(() => {
+    if (!searchParams) {
+      return;
+    }
+
     const params = new URLSearchParams(searchParams.toString());
     params.set('section', activeSection);
     router.replace(`/docs?${params.toString()}`, { scroll: false });
@@ -909,7 +915,9 @@ const EnhancedDocsLayout: React.FC<EnhancedDocsLayoutProps> = ({ className = "" 
                         <ActionButton
                           onClick={() => {
                             // Set URL parameters to trigger usage category view
-                            const params = new URLSearchParams(searchParams.toString());
+                            const params = searchParams
+                              ? new URLSearchParams(searchParams.toString())
+                              : new URLSearchParams();
                             params.set('viewUsageCategory', 'true');
                             router.replace(`/docs?${params.toString()}`, { scroll: false });
                           }}
