@@ -1,3 +1,5 @@
+ 'use client';
+
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -15,7 +17,8 @@ import {
   ParsedLink,
   findSectionById,
   getAllValidSectionIds,
-  DEFAULT_LINK_CONTEXT
+  DEFAULT_LINK_CONTEXT,
+  getRepoInfoFromUrl
 } from '../../constants/docsConfig';
 import {
   DocHeader,
@@ -111,7 +114,7 @@ const cacheImage = async (src: string): Promise<string> => {
 const EnhancedDocsLayout: React.FC<EnhancedDocsLayoutProps> = ({ className = "" }) => {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const sectionParam = searchParams.get('section');
+  const sectionParam = searchParams?.get('section') || null;
   
   const [loading, setLoading] = useState<{ [key: string]: boolean }>({});
   const [content, setContent] = useState<{ [key: string]: string }>({});
@@ -132,6 +135,10 @@ const EnhancedDocsLayout: React.FC<EnhancedDocsLayoutProps> = ({ className = "" 
 
   // Update URL when active section changes
   useEffect(() => {
+    if (!searchParams) {
+      return;
+    }
+
     const params = new URLSearchParams(searchParams.toString());
     params.set('section', activeSection);
     router.replace(`/docs?${params.toString()}`, { scroll: false });
@@ -140,10 +147,21 @@ const EnhancedDocsLayout: React.FC<EnhancedDocsLayoutProps> = ({ className = "" 
   // Update currentContext when active section changes
   useEffect(() => {
     const currentSection = findSectionById(activeSection, docSections);
-    if (currentSection?.githubPath) {
-      setCurrentContext(currentSection.githubPath);
-      linkResolver.updateContext({ currentFilePath: currentSection.githubPath });
-    }
+    const repoInfo = currentSection?.githubUrl ? getRepoInfoFromUrl(currentSection.githubUrl) : null;
+    const repositoryOwner = repoInfo?.owner ?? DEFAULT_LINK_CONTEXT.repositoryOwner;
+    const repositoryName = repoInfo?.repo ?? DEFAULT_LINK_CONTEXT.repositoryName;
+    const branch = repoInfo?.branch ?? DEFAULT_LINK_CONTEXT.branch;
+    const baseGitHubUrl = repoInfo?.baseGitHubUrl ?? `https://github.com/${repositoryOwner}/${repositoryName}`;
+    const nextContextPath = currentSection?.githubPath || DEFAULT_LINK_CONTEXT.currentFilePath;
+
+    setCurrentContext(nextContextPath);
+    linkResolver.updateContext({ 
+      currentFilePath: nextContextPath,
+      repositoryOwner,
+      repositoryName,
+      branch,
+      baseGitHubUrl
+    });
   }, [activeSection, docSections, linkResolver]);
 
   const fetchContent = useCallback(async (section: DocSection) => {
@@ -909,7 +927,9 @@ const EnhancedDocsLayout: React.FC<EnhancedDocsLayoutProps> = ({ className = "" 
                         <ActionButton
                           onClick={() => {
                             // Set URL parameters to trigger usage category view
-                            const params = new URLSearchParams(searchParams.toString());
+                            const params = searchParams
+                              ? new URLSearchParams(searchParams.toString())
+                              : new URLSearchParams();
                             params.set('viewUsageCategory', 'true');
                             router.replace(`/docs?${params.toString()}`, { scroll: false });
                           }}

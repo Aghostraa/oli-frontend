@@ -10,7 +10,7 @@ import {
   validateURL,
   validateAddress_empty
 } from '../utils/validation';
-import { CHAINS } from './chains';
+import { CHAIN_OPTIONS } from './chains';
 
 // Define component render functions without JSX directly in TS file
 export const renderOwnerProjectSelect = (props: { value: FieldValue; onChange: (value: FieldValue) => void }) => {
@@ -78,10 +78,7 @@ export const formFields: FormField[] = [
     visibility: 'simple',
     options: [
       { value: '', label: 'Select a chain' },
-      ...CHAINS.map(chain => ({
-        value: chain.caip2,
-        label: chain.name
-      }))
+      ...CHAIN_OPTIONS
     ],
     required: true
   },

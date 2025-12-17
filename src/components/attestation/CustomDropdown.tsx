@@ -10,6 +10,7 @@ interface DropdownOption {
   label: string;
   description?: string;
   group?: string;
+  isTestnet?: boolean;
 }
 
 interface CustomDropdownProps {
@@ -45,6 +46,7 @@ const CustomDropdown: React.FC<CustomDropdownProps> = ({
   const isOpen = dropdownContext ? dropdownContext.openDropdownId === id : localIsOpen;
   const [searchTerm, setSearchTerm] = useState('');
   const [showOrbitOnly, setShowOrbitOnly] = useState(false);
+  const [includeTestnets, setIncludeTestnets] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -54,7 +56,7 @@ const CustomDropdown: React.FC<CustomDropdownProps> = ({
 
   // Group options by their group property (if present)
   const groupedOptions = options.reduce((groups: Record<string, DropdownOption[]>, option) => {
-    const group = option.group || 'Ungrouped';
+    const group = option.group || (option.isTestnet ? 'Testnets' : 'Mainnets');
     if (!groups[group]) {
       groups[group] = [];
     }
@@ -64,6 +66,10 @@ const CustomDropdown: React.FC<CustomDropdownProps> = ({
 
   // Filter options based on search term and Orbit toggle
   const filteredOptions = options.filter(option => {
+    if (isChainDropdown && !includeTestnets && option.isTestnet) {
+      return false;
+    }
+
     // Filter by Orbit chains if toggle is enabled
     if (isChainDropdown && showOrbitOnly && !isOrbitChain(String(option.value))) {
       return false;
@@ -91,6 +97,7 @@ const CustomDropdown: React.FC<CustomDropdownProps> = ({
         }
         setSearchTerm('');
         setShowOrbitOnly(false);
+        setIncludeTestnets(false);
       }
     };
 
@@ -108,6 +115,13 @@ const CustomDropdown: React.FC<CustomDropdownProps> = ({
       inputRef.current.focus();
     }
   }, [isOpen]);
+
+  // Clear selection if a hidden testnet is currently selected
+  useEffect(() => {
+    if (isChainDropdown && !includeTestnets && selectedOption?.isTestnet) {
+      onChange('');
+    }
+  }, [includeTestnets, isChainDropdown, onChange, selectedOption]);
 
   // Handle toggling the dropdown
   const toggleDropdown = () => {
@@ -299,7 +313,7 @@ const CustomDropdown: React.FC<CustomDropdownProps> = ({
         aria-hidden="true"
       >
         <option value="" disabled>{placeholder}</option>
-        {options.map(option => (
+        {filteredOptions.map(option => (
           <option key={String(option.value)} value={String(option.value)}>
             {option.label}
           </option>
@@ -330,9 +344,9 @@ const CustomDropdown: React.FC<CustomDropdownProps> = ({
                   />
                 </div>
               </div>
-              {/* Orbit chains toggle - only show for chain dropdowns */}
+              {/* Chain-specific toggles */}
               {isChainDropdown && (
-                <div className="px-3 pb-2">
+                <div className="px-3 pb-2 flex flex-wrap gap-3">
                   <label className="inline-flex items-center cursor-pointer group">
                     <input
                       type="checkbox"
@@ -352,7 +366,30 @@ const CustomDropdown: React.FC<CustomDropdownProps> = ({
                       }`} />
                     </div>
                     <span className="ml-2 text-xs font-medium text-gray-700 group-hover:text-gray-900">
-                      Show Orbit chains only
+                      Show Orbit only
+                    </span>
+                  </label>
+
+                  <label className="inline-flex items-center cursor-pointer group">
+                    <input
+                      type="checkbox"
+                      checked={includeTestnets}
+                      onChange={(e) => {
+                        setIncludeTestnets(e.target.checked);
+                        e.stopPropagation();
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                      className="sr-only"
+                    />
+                    <div className={`relative w-11 h-6 rounded-full transition-colors duration-200 ${
+                      includeTestnets ? 'bg-gradient-to-r from-amber-500 to-yellow-400' : 'bg-gray-300'
+                    }`}>
+                      <div className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow-sm transform transition-transform duration-200 ${
+                        includeTestnets ? 'translate-x-5' : 'translate-x-0'
+                      }`} />
+                    </div>
+                    <span className="ml-2 text-xs font-medium text-gray-700 group-hover:text-gray-900">
+                      Include testnets
                     </span>
                   </label>
                 </div>

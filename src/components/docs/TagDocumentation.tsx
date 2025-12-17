@@ -115,6 +115,10 @@ const TagDocumentation: React.FC<TagDocumentationProps> = ({ showHeader = true }
 
   // Check for URL parameters to auto-expand usage category
   useEffect(() => {
+    if (!searchParams) {
+      return;
+    }
+
     const viewUsageCategory = searchParams.get('viewUsageCategory');
     if (viewUsageCategory === 'true' && !loading) {
       // Clear any existing filters

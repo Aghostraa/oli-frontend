@@ -28,6 +28,10 @@ const DeveloperPageContent = () => {
 
   // Check URL parameters for OAuth callback result (moved from GitHubOAuthStep)
   React.useEffect(() => {
+    if (!searchParams) {
+      return;
+    }
+
     const githubConnected = searchParams.get('github_connected');
     const username = searchParams.get('github_username');
     const name = searchParams.get('github_name');

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import LoadingAnimation from '@/components/LoadingAnimation';
 import { CHAINS } from '@/constants/chains';
@@ -74,6 +74,8 @@ interface BlockspaceCoverageData {
   totalTransactions: number;
   color: string;
 }
+
+const ARBITRUM_BASE_CHAIN_IDS = ['eip155:42161', 'eip155:42170'];
 
 // Fetch blockspace coverage data from growthepie API
 const fetchBlockspaceCoverage = async (): Promise<BlockspaceCoverageData[]> => {
@@ -214,11 +216,19 @@ const LabelAnalyticsChart: React.FC = () => {
   const [selectedChain, setSelectedChain] = useState<string>('all');
   const [selectedTagId, setSelectedTagId] = useState<string>('all');
   const [selectedAttester, setSelectedAttester] = useState<string>('');
+  const [arbitrumFocus, setArbitrumFocus] = useState<boolean>(false);
   const [attesterData, setAttesterData] = useState<AttesterApiResponse | null>(null);
   const [attesterLoading, setAttesterLoading] = useState<boolean>(false);
   const [blockspaceCoverageData, setBlockspaceCoverageData] = useState<BlockspaceCoverageData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const arbitrumChainIds = useMemo(() => {
+    const orbitArbitrumChains = CHAINS
+      .filter(chain => chain.isOrbitChain && chain.orbitMetadata?.parentChain?.toLowerCase().includes('arbitrum'))
+      .map(chain => chain.caip2);
+    return new Set([...ARBITRUM_BASE_CHAIN_IDS, ...orbitArbitrumChains]);
+  }, []);
   
   // Fetch all data on component mount
   useEffect(() => {
@@ -281,6 +291,12 @@ const LabelAnalyticsChart: React.FC = () => {
     loadAttesterData();
   }, [selectedAttester]);
 
+  useEffect(() => {
+    if (arbitrumFocus && selectedChain !== 'all' && !arbitrumChainIds.has(selectedChain)) {
+      setSelectedChain('all');
+    }
+  }, [arbitrumFocus, selectedChain, arbitrumChainIds]);
+
   if (loading) {
     return <LoadingAnimation />;
   }
@@ -334,6 +350,9 @@ const LabelAnalyticsChart: React.FC = () => {
       attesterData={attesterData}
       attesterLoading={attesterLoading}
       blockspaceCoverageData={blockspaceCoverageData}
+      arbitrumFocus={arbitrumFocus}
+      setArbitrumFocus={setArbitrumFocus}
+      arbitrumChainIds={arbitrumChainIds}
     />
   );
 };
@@ -352,6 +371,9 @@ interface LabelAnalyticsContentProps {
   attesterData: AttesterApiResponse | null;
   attesterLoading: boolean;
   blockspaceCoverageData: BlockspaceCoverageData[];
+  arbitrumFocus: boolean;
+  setArbitrumFocus: React.Dispatch<React.SetStateAction<boolean>>;
+  arbitrumChainIds: Set<string>;
 }
 
 const LabelAnalyticsContent: React.FC<LabelAnalyticsContentProps> = ({
@@ -366,7 +388,10 @@ const LabelAnalyticsContent: React.FC<LabelAnalyticsContentProps> = ({
   setSelectedAttester,
   attesterData,
   attesterLoading,
-  blockspaceCoverageData
+  blockspaceCoverageData,
+  arbitrumFocus,
+  setArbitrumFocus,
+  arbitrumChainIds
 }) => {
   // Color palettes
   const labelColors = [
@@ -376,6 +401,37 @@ const LabelAnalyticsContent: React.FC<LabelAnalyticsContentProps> = ({
   const chainColors = [
     '#1E40AF', '#7C3AED', '#059669', '#D97706', '#DC2626', '#4F46E5', '#C026D3', '#0D9488', '#B91C1C', '#7C2D12', '#365314', '#1E3A8A'
   ];
+
+  const chainOptions = useMemo(() => {
+    const filtered = arbitrumFocus
+      ? CHAINS.filter(chain => arbitrumChainIds.has(chain.caip2))
+      : CHAINS;
+    return filtered;
+  }, [arbitrumFocus, arbitrumChainIds]);
+
+  const allChainsLabel = arbitrumFocus ? 'All Arbitrum Chains' : 'All Chains';
+
+  const effectiveSelectedChain = useMemo(() => {
+    if (selectedChain === 'all') return 'all';
+    if (arbitrumFocus && !arbitrumChainIds.has(selectedChain)) {
+      return 'all';
+    }
+    return selectedChain;
+  }, [selectedChain, arbitrumFocus, arbitrumChainIds]);
+
+  const selectedChainMetadata = chainOptions.find(chain => chain.caip2 === effectiveSelectedChain) 
+    || CHAINS.find(chain => chain.caip2 === effectiveSelectedChain);
+  const selectedChainLabel = selectedChainMetadata?.shortName || effectiveSelectedChain;
+
+  const toggleArbitrumFocus = () => {
+    setArbitrumFocus((prev) => {
+      const next = !prev;
+      if (next) {
+        setSelectedChain('all');
+      }
+      return next;
+    });
+  };
 
   // Process the API data for charts
   const processApiData = () => {
@@ -395,13 +451,18 @@ const LabelAnalyticsContent: React.FC<LabelAnalyticsContentProps> = ({
     // Group data by tag_id and chain_id
     const tagCounts: Record<string, number> = {};
     const chainCounts: Record<string, number> = {};
-    let totalTagIds = 0;
+    let totalTagIdsAllChains = 0;
 
     values.forEach(([chainId, tagId, count]) => {
-      totalTagIds += count;
-      
+      totalTagIdsAllChains += count; // keep overall count unchanged
+
+      const isInArbitrumEcosystem = !arbitrumFocus || arbitrumChainIds.has(chainId);
+      if (!isInArbitrumEcosystem) {
+        return;
+      }
+
       // Count tags (filter by selected chain if needed)
-      if (selectedChain === 'all' || chainId === selectedChain) {
+      if (effectiveSelectedChain === 'all' || chainId === effectiveSelectedChain) {
         tagCounts[tagId] = (tagCounts[tagId] || 0) + count;
       }
       
@@ -433,7 +494,7 @@ const LabelAnalyticsContent: React.FC<LabelAnalyticsContentProps> = ({
           color: chainColors[index % chainColors.length]
         };
       })
-      .filter(item => item.count >= 10) // Only show chains with at least 10 attestations
+      .filter(item => item.count >= 10 || arbitrumFocus) // keep small chains when focusing on Arbitrum ecosystem
       .sort((a, b) => b.count - a.count);
 
     // Get totals data
@@ -444,7 +505,7 @@ const LabelAnalyticsContent: React.FC<LabelAnalyticsContentProps> = ({
     return {
       labelData,
       chainData,
-      totalTagIds, // Always show total across all chains, regardless of selected chain
+      totalTagIds: totalTagIdsAllChains, // Always show total across all chains, regardless of selected chain
       totalAttestations,
       onchainAttestations,
       offchainAttestations
@@ -476,8 +537,13 @@ const LabelAnalyticsContent: React.FC<LabelAnalyticsContentProps> = ({
     const tagCounts: Record<string, number> = {};
     
     values.forEach(([chainId, tagId, count]) => {
+      const isInArbitrumEcosystem = !arbitrumFocus || arbitrumChainIds.has(chainId);
+      if (!isInArbitrumEcosystem) {
+        return;
+      }
+
       // Filter by selected chain if specified
-      if (selectedChain === 'all' || chainId === selectedChain) {
+      if (effectiveSelectedChain === 'all' || chainId === effectiveSelectedChain) {
         tagCounts[tagId] = (tagCounts[tagId] || 0) + count;
       }
     });
@@ -554,6 +620,28 @@ const LabelAnalyticsContent: React.FC<LabelAnalyticsContentProps> = ({
     }
     return null;
   };
+
+  const coverageDataToRender = useMemo(() => {
+    if (!arbitrumFocus) {
+      return blockspaceCoverageData;
+    }
+
+    return blockspaceCoverageData.filter(chain => 
+      chain.chainName.toLowerCase().includes('arbitrum')
+    );
+  }, [blockspaceCoverageData, arbitrumFocus]);
+
+  const coverageStats = useMemo(() => {
+    if (!coverageDataToRender.length) {
+      return { average: 0, best: 0, labeledTx: 0 };
+    }
+
+    const average = coverageDataToRender.reduce((sum, chain) => sum + chain.labeledPercentage, 0) / coverageDataToRender.length;
+    const best = Math.max(...coverageDataToRender.map(c => c.labeledPercentage));
+    const labeledTx = coverageDataToRender.reduce((sum, chain) => sum + (chain.totalTransactions * chain.labeledPercentage / 100), 0);
+
+    return { average, best, labeledTx };
+  }, [coverageDataToRender]);
 
   return (
     <div className="space-y-8">
@@ -634,40 +722,62 @@ const LabelAnalyticsContent: React.FC<LabelAnalyticsContentProps> = ({
       <div className="bg-white rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.05)] p-8">
           <div className="mb-6">
             <h2 className="text-2xl font-bold text-gray-900 mb-2">
-              {selectedChain === 'all' ? (
+              {effectiveSelectedChain === 'all' ? (
                 <>
                   Tag ID Breakdown ({processedLabelData.reduce((sum, item) => sum + item.count, 0).toLocaleString()})
                 </>
               ) : (
                 <>
-                  Tag ID Breakdown - {CHAINS.find(chain => chain.caip2 === selectedChain)?.shortName} ({processedLabelData.reduce((sum, item) => sum + item.count, 0).toLocaleString()})
+                  Tag ID Breakdown - {selectedChainLabel} ({processedLabelData.reduce((sum, item) => sum + item.count, 0).toLocaleString()})
                 </>
               )}
             </h2>
             <div className="flex justify-between items-center">
               <p className="text-gray-600">
-                {selectedChain === 'all' 
+                {effectiveSelectedChain === 'all' 
                   ? "Number of tags for each Tag ID."
-                  : `Number of tags for each Tag ID on ${CHAINS.find(chain => chain.caip2 === selectedChain)?.shortName}.`
+                  : `Number of tags for each Tag ID on ${selectedChainLabel}.`
                 }
               </p>
-              <div className="flex items-center space-x-2">
-                <label className="text-sm font-medium text-gray-700">
-                  Filter by Blockchain:
-                </label>
-                <select
-                  value={selectedChain}
-                  onChange={(e) => setSelectedChain(e.target.value)}
-                  className="px-3 py-1 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 bg-white text-sm"
-                >
-                  <option value="all">All Chains</option>
-                  {CHAINS.map((chain) => (
-                    <option key={chain.id} value={chain.caip2}>
-                      {chain.shortName}
-                    </option>
-                  ))}
-                </select>
+              <div className="flex items-center space-x-4">
+                <div className="flex items-center space-x-2">
+                  <label className="text-sm font-medium text-gray-700">
+                    Filter by Blockchain:
+                  </label>
+                  <select
+                    value={effectiveSelectedChain === 'all' ? 'all' : selectedChain}
+                    onChange={(e) => setSelectedChain(e.target.value)}
+                    className="px-3 py-1 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 bg-white text-sm"
+                  >
+                    <option value="all">{allChainsLabel}</option>
+                    {chainOptions.map((chain) => (
+                      <option key={chain.id} value={chain.caip2}>
+                        {chain.shortName}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <span className="text-sm font-medium text-gray-700">Arbitrum ecosystem</span>
+                  <button
+                    type="button"
+                    onClick={toggleArbitrumFocus}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 ${arbitrumFocus ? 'bg-blue-600' : 'bg-gray-300'}`}
+                    role="switch"
+                    aria-checked={arbitrumFocus}
+                    aria-label="Toggle Arbitrum ecosystem focus"
+                  >
+                    <span
+                      className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-sm transition-transform ${arbitrumFocus ? 'translate-x-5' : 'translate-x-1'}`}
+                    />
+                  </button>
+                </div>
               </div>
+              {arbitrumFocus && (
+                <p className="text-xs text-blue-700 mt-2">
+                  Showing Arbitrum One, Arbitrum Nova, and Arbitrum Orbit chains only.
+                </p>
+              )}
             </div>
           </div>
 
@@ -711,11 +821,15 @@ const LabelAnalyticsContent: React.FC<LabelAnalyticsContentProps> = ({
               </>
             )}
           </h2>
-          <div className="flex justify-between items-center">
-            <p className="text-gray-600">
+            <div className="flex justify-between items-center">
+              <p className="text-gray-600">
               {selectedTagId === 'all' 
-                ? "Number of tags assigned to each blockchain network (minimum of 10)."
-                : `Number of ${selectedTagId} tags assigned to each blockchain network (minimum of 10).`
+                ? arbitrumFocus 
+                  ? "Arbitrum One, Nova, and Orbit chain attestations (per chain)."
+                  : "Number of tags assigned to each blockchain network (minimum of 10)."
+                : arbitrumFocus
+                  ? `Number of ${selectedTagId} tags across Arbitrum One, Nova, and Orbit chains (per chain).`
+                  : `Number of ${selectedTagId} tags assigned to each blockchain network (minimum of 10).`
               }
             </p>
             <div className="flex items-center space-x-2">
@@ -780,13 +894,13 @@ const LabelAnalyticsContent: React.FC<LabelAnalyticsContentProps> = ({
                   Filter by Chain:
                 </label>
                 <select
-                  value={selectedChain}
+                  value={effectiveSelectedChain === 'all' ? 'all' : selectedChain}
                   onChange={(e) => setSelectedChain(e.target.value)}
                   className="px-3 py-1 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 bg-white text-sm"
                   disabled={!selectedAttester.trim() || !attesterData}
                 >
-                  <option value="all">All Chains</option>
-                  {CHAINS.map((chain) => (
+                  <option value="all">{allChainsLabel}</option>
+                  {chainOptions.map((chain) => (
                     <option key={chain.id} value={chain.caip2}>
                       {chain.shortName}
                     </option>
@@ -830,20 +944,20 @@ const LabelAnalyticsContent: React.FC<LabelAnalyticsContentProps> = ({
             {/* Tag Distribution */}
             <div>
               <h3 className="text-lg font-semibold text-gray-900 mb-4">
-                {selectedChain === 'all' ? (
+                {effectiveSelectedChain === 'all' ? (
                   <>
                     Tag Breakdown ({attesterChartData.reduce((sum, item) => sum + item.count, 0).toLocaleString()})
                   </>
                 ) : (
                   <>
-                    Tag Breakdown - {CHAINS.find(chain => chain.caip2 === selectedChain)?.shortName} ({attesterChartData.reduce((sum, item) => sum + item.count, 0).toLocaleString()})
+                    Tag Breakdown - {selectedChainLabel} ({attesterChartData.reduce((sum, item) => sum + item.count, 0).toLocaleString()})
                   </>
                 )}
               </h3>
               <p className="text-gray-600 mb-6">
-                {selectedChain === 'all' 
+                {effectiveSelectedChain === 'all' 
                   ? "Number of attestations by tag type across all chains for this attester."
-                  : `Number of attestations by tag type on ${CHAINS.find(chain => chain.caip2 === selectedChain)?.shortName} for this attester.`
+                  : `Number of attestations by tag type on ${selectedChainLabel} for this attester.`
                 }
               </p>
               
@@ -1007,7 +1121,7 @@ const LabelAnalyticsContent: React.FC<LabelAnalyticsContentProps> = ({
         </div>
 
         <div>
-          {blockspaceCoverageData.length === 0 ? (
+          {coverageDataToRender.length === 0 ? (
             <div className="flex justify-center items-center h-96">
               <span className="text-gray-500">No blockspace coverage data available</span>
             </div>
@@ -1019,26 +1133,26 @@ const LabelAnalyticsContent: React.FC<LabelAnalyticsContentProps> = ({
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div className="text-center">
                     <p className="text-2xl font-bold text-blue-600">
-                      {(blockspaceCoverageData.reduce((sum, chain) => sum + chain.labeledPercentage, 0) / blockspaceCoverageData.length).toFixed(1)}%
+                      {coverageStats.average.toFixed(1)}%
                     </p>
                     <p className="text-sm text-gray-600">Average Coverage</p>
                   </div>
                   <div className="text-center">
                     <p className="text-2xl font-bold text-green-600">
-                      {Math.max(...blockspaceCoverageData.map(c => c.labeledPercentage)).toFixed(1)}%
+                      {coverageStats.best.toFixed(1)}%
                     </p>
                     <p className="text-sm text-gray-600">Best Coverage</p>
                   </div>
                   <div className="text-center">
                     <p className="text-2xl font-bold text-purple-600">
-                      {blockspaceCoverageData.reduce((sum, chain) => sum + (chain.totalTransactions * chain.labeledPercentage / 100), 0).toLocaleString()}
+                      {coverageStats.labeledTx.toLocaleString()}
                     </p>
                     <p className="text-sm text-gray-600">Transactions Labeled</p>
                   </div>
                 </div>
               </div>
 
-              {blockspaceCoverageData.map((chain) => (
+              {coverageDataToRender.map((chain) => (
                 <div key={chain.chainName} className="group hover:bg-gray-50 rounded-lg p-2.5 transition-colors">
                   <div className="flex items-center justify-between mb-0.5">
                     <div className="flex items-center space-x-3">
