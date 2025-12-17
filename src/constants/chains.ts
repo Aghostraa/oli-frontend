@@ -21,6 +21,7 @@ export interface ChainMetadata {
   shortName: string;
   description: string;
   chainId?: number;
+  isTestnet?: boolean;
   isOrbitChain?: boolean;
   orbitMetadata?: {
     parentChain: string;
@@ -518,7 +519,22 @@ const BASE_CHAINS: ChainMetadata[] = [
       darkTextOnBackground: false
     },
     logo: null,
-    description: 'MegaETH Testnet v2 - Featured promotional testnet for MegaETH'
+    description: 'MegaETH Testnet v2 - Featured promotional testnet for MegaETH',
+    isTestnet: true
+  },
+  {
+    id: 'megaeth',
+    name: '🐰 MegaETH',
+    shortName: 'MegaETH',
+    caip2: 'eip155:4326',
+    chainId: 4326,
+    colors: {
+      light: ['#0EA5E9', '#38BDF8'],
+      dark: ['#0EA5E9', '#38BDF8'],
+      darkTextOnBackground: false
+    },
+    logo: null,
+    description: 'MegaETH mainnet.'
   },
   {
     id: 'megaeth_testnet',
@@ -532,7 +548,8 @@ const BASE_CHAINS: ChainMetadata[] = [
       darkTextOnBackground: false
     },
     logo: null,
-    description: 'MegaETH Testnet V1 - Featured promotional testnet for MegaETH'
+    description: 'MegaETH Testnet V1 - Featured promotional testnet for MegaETH',
+    isTestnet: true
   },
   {
     id: 'any',
@@ -575,14 +592,25 @@ const orbitChains = loadOrbitChains();
 const baseChainIds = new Set(BASE_CHAINS.map(c => c.caip2));
 const uniqueOrbitChains = orbitChains.filter(chain => !baseChainIds.has(chain.caip2));
 
-export const CHAINS: ChainMetadata[] = [...BASE_CHAINS, ...uniqueOrbitChains];
+// Basic heuristic to identify testnets by name/id
+const isTestnetChain = (chain: ChainMetadata) => {
+  return !!chain.isTestnet;
+};
+
+const combinedChains = [...BASE_CHAINS, ...uniqueOrbitChains];
+const mainnetChains = combinedChains.filter(chain => !isTestnetChain(chain));
+const testnetChains = combinedChains.filter(chain => isTestnetChain(chain));
+
+export const CHAINS: ChainMetadata[] = [...mainnetChains, ...testnetChains];
 
 export type Chain = typeof CHAINS[number]['id'];
 
 export const CHAIN_OPTIONS = CHAINS.map(chain => ({
   value: chain.caip2,
   label: chain.name,
-  isOrbitChain: chain.isOrbitChain || false
+  isOrbitChain: chain.isOrbitChain || false,
+  group: isTestnetChain(chain) ? 'Testnets' : 'Mainnets',
+  isTestnet: isTestnetChain(chain)
 }));
 
 // Helper function to check if a chain is an Orbit chain

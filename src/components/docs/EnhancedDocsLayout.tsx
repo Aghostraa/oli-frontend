@@ -17,7 +17,8 @@ import {
   ParsedLink,
   findSectionById,
   getAllValidSectionIds,
-  DEFAULT_LINK_CONTEXT
+  DEFAULT_LINK_CONTEXT,
+  getRepoInfoFromUrl
 } from '../../constants/docsConfig';
 import {
   DocHeader,
@@ -146,10 +147,21 @@ const EnhancedDocsLayout: React.FC<EnhancedDocsLayoutProps> = ({ className = "" 
   // Update currentContext when active section changes
   useEffect(() => {
     const currentSection = findSectionById(activeSection, docSections);
-    if (currentSection?.githubPath) {
-      setCurrentContext(currentSection.githubPath);
-      linkResolver.updateContext({ currentFilePath: currentSection.githubPath });
-    }
+    const repoInfo = currentSection?.githubUrl ? getRepoInfoFromUrl(currentSection.githubUrl) : null;
+    const repositoryOwner = repoInfo?.owner ?? DEFAULT_LINK_CONTEXT.repositoryOwner;
+    const repositoryName = repoInfo?.repo ?? DEFAULT_LINK_CONTEXT.repositoryName;
+    const branch = repoInfo?.branch ?? DEFAULT_LINK_CONTEXT.branch;
+    const baseGitHubUrl = repoInfo?.baseGitHubUrl ?? `https://github.com/${repositoryOwner}/${repositoryName}`;
+    const nextContextPath = currentSection?.githubPath || DEFAULT_LINK_CONTEXT.currentFilePath;
+
+    setCurrentContext(nextContextPath);
+    linkResolver.updateContext({ 
+      currentFilePath: nextContextPath,
+      repositoryOwner,
+      repositoryName,
+      branch,
+      baseGitHubUrl
+    });
   }, [activeSection, docSections, linkResolver]);
 
   const fetchContent = useCallback(async (section: DocSection) => {

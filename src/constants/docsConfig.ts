@@ -171,12 +171,30 @@ export const DOC_SECTIONS: DocSection[] = [
     children: []
   },
   {
+    id: 'oli-hardhat',
+    title: 'OLI Hardhat Plugin',
+    description: 'Hardhat plugin for generating and publishing Open Labels attestations during deployments',
+    githubUrl: 'https://raw.githubusercontent.com/openlabelsinitiative/oli-hardhat/main/README.md',
+    githubPath: 'README.md',
+    order: 5,
+    children: []
+  },
+  {
+    id: 'oli-sdk',
+    title: 'OLI SDK',
+    description: 'TypeScript SDK for integrating with the Open Labels ecosystem and label pool',
+    githubUrl: 'https://raw.githubusercontent.com/openlabelsinitiative/oli-sdk/main/README.md',
+    githubPath: 'README.md',
+    order: 6,
+    children: []
+  },
+  {
     id: 'partnerships',
     title: 'Partnerships',
     description: 'Partnership documentation and collaboration opportunities',
     githubUrl: 'https://raw.githubusercontent.com/openlabelsinitiative/OLI/main/PARTNERSHIPS.md',
     githubPath: 'PARTNERSHIPS.md',
-    order: 5,
+    order: 7,
     children: []
   },
   {
@@ -184,7 +202,7 @@ export const DOC_SECTIONS: DocSection[] = [
     title: 'API Reference',
     description: 'Interactive API documentation with testing capabilities',
     component: APIReference,
-    order: 6,
+    order: 8,
     children: []
   }
 ];
@@ -217,10 +235,20 @@ export class SimpleLinkResolver {
 
   private buildSectionMap(sections: DocSection[]): void {
     const addSection = (section: DocSection) => {
+      const repoInfo = section.githubUrl ? getRepoInfoFromUrl(section.githubUrl) : null;
+      const repoOwner = repoInfo?.owner || this.context.repositoryOwner;
+      const repoName = repoInfo?.repo || this.context.repositoryName;
+      const branch = repoInfo?.branch || this.context.branch;
+      const baseGitHubUrl = repoInfo?.baseGitHubUrl || `https://github.com/${repoOwner}/${repoName}`;
+      
       // Map by GitHub path with extensive variations
       if (section.githubPath) {
-        this.sectionMap.set(section.githubPath, section);
-        this.sectionMap.set(section.githubPath.toLowerCase(), section);
+        if (!this.sectionMap.has(section.githubPath)) {
+          this.sectionMap.set(section.githubPath, section);
+        }
+        if (!this.sectionMap.has(section.githubPath.toLowerCase())) {
+          this.sectionMap.set(section.githubPath.toLowerCase(), section);
+        }
         
         // Handle README.md variations
         if (section.githubPath.endsWith('/README.md')) {
@@ -328,27 +356,26 @@ export class SimpleLinkResolver {
       if (section.githubUrl) {
         const path = this.extractGitHubFilePath(section.githubUrl);
         if (path) {
-          this.sectionMap.set(path, section);
-          this.sectionMap.set(path.toLowerCase(), section);
+          if (!this.sectionMap.has(path)) {
+            this.sectionMap.set(path, section);
+          }
+          if (!this.sectionMap.has(path.toLowerCase())) {
+            this.sectionMap.set(path.toLowerCase(), section);
+          }
           
           // Also create blob URL mapping for common GitHub links
-          const blobUrl = section.githubUrl.replace('raw.githubusercontent.com', 'github.com').replace(`/${this.context.branch}/`, `/blob/${this.context.branch}/`);
+          const blobUrl = section.githubUrl
+            .replace('raw.githubusercontent.com', 'github.com')
+            .replace(`/${branch}/`, `/blob/${branch}/`);
           this.sectionMap.set(blobUrl, section);
           
           // Create direct GitHub blob URL (handle different repositories)
-          let directBlobUrl;
-          if (section.githubUrl.includes('openlabelsinitiative/oli-python')) {
-            // Special handling for oli-python repository
-            directBlobUrl = `https://github.com/openlabelsinitiative/oli-python/blob/${this.context.branch}/${path}`;
-          } else {
-            // Default to main OLI repository
-            directBlobUrl = `https://github.com/${this.context.repositoryOwner}/${this.context.repositoryName}/blob/${this.context.branch}/${path}`;
-          }
+          const directBlobUrl = `${baseGitHubUrl}/blob/${branch}/${path}`;
 
           this.sectionMap.set(directBlobUrl, section);
           
           // Also map the double-slash version (common issue)
-          const doubleSlashUrl = directBlobUrl.replace('/blob/main/', '/blob/main//');
+          const doubleSlashUrl = directBlobUrl.replace(`/blob/${branch}/`, `/blob/${branch}//`);
           this.sectionMap.set(doubleSlashUrl, section);
         }
       }
@@ -673,6 +700,41 @@ export class SimpleLinkResolver {
     
     return { resolved, section };
   }
+}
+
+export function getRepoInfoFromUrl(url: string) {
+  try {
+    const parsed = new URL(url);
+    if (parsed.hostname === 'raw.githubusercontent.com') {
+      const parts = parsed.pathname.split('/').filter(Boolean);
+      if (parts.length >= 3) {
+        const [owner, repo, branch = DEFAULT_LINK_CONTEXT.branch] = parts;
+        return {
+          owner,
+          repo,
+          branch,
+          baseGitHubUrl: `https://github.com/${owner}/${repo}`
+        };
+      }
+    }
+
+    if (parsed.hostname === 'github.com') {
+      const parts = parsed.pathname.split('/').filter(Boolean);
+      if (parts.length >= 4 && (parts[2] === 'blob' || parts[2] === 'tree')) {
+        const [owner, repo, , branch = DEFAULT_LINK_CONTEXT.branch] = parts;
+        return {
+          owner,
+          repo,
+          branch,
+          baseGitHubUrl: `https://github.com/${owner}/${repo}`
+        };
+      }
+    }
+  } catch {
+    // Fall through to null
+  }
+
+  return null;
 }
 
 /**
