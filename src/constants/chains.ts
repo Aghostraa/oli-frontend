@@ -84,6 +84,20 @@ const BASE_CHAINS: ChainMetadata[] = [
     description: 'Arbitrum Nova is an Optimium developed by Offchain using AnyTrust protocol. As part of the Nitro stack Arbitrum Nova is fully EVM compatible.'
   },
   {
+    id: 'abstract',
+    name: 'Abstract',
+    shortName: 'Abstract',
+    caip2: 'eip155:2741',
+    chainId: 2741,
+    colors: {
+      light: ['#111827', '#111827'],
+      dark: ['#111827', '#111827'],
+      darkTextOnBackground: false
+    },
+    logo: null,
+    description: 'The mainnet for Abstract.'
+  },
+  {
     id: 'base',
     name: 'Base',
     shortName: 'Base',
