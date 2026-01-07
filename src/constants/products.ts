@@ -54,3 +54,4 @@ export const PRODUCTS_USING_OLI: Product[] = [
 // Default gradient color for products without images
 export const DEFAULT_PRODUCT_COLOR = 'from-blue-400 via-purple-500 to-pink-500';
 
+

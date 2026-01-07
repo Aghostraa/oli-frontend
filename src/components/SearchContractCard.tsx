@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Attestation } from '@/services/attestationService';
+import { Attestation, searchAttestations } from '@/services/attestationService';
+import { fetchLabelsForAddress, type LabelItem } from '@/services/addressSearchService';
 import { CHAINS } from '@/constants/chains';
 import { resolveEnsName, getEnscribeUrl, EnsState } from '@/utils/ens';
 
@@ -21,6 +22,7 @@ interface ParsedAttestation {
   revoked: boolean;
   tags: Tag[];
   chainId?: string;
+  raw: Attestation;
 }
 
 interface ContractMetadata {
@@ -60,6 +62,9 @@ interface SearchContractCardProps {
   attestations: Attestation[];
   onAttest?: () => void;
   onSelectAttestation?: (attestation: ParsedAttestation) => void;
+  enableLabelsLookup?: boolean;
+  labelChainFilter?: string;
+  groupLabelsByAttester?: boolean;
 }
 
 const GROWTHEPIE_ATTESTER = '0xA725646c05e6Bb813d98C5aBB4E72DF4bcF00B56';
@@ -95,18 +100,27 @@ const SearchContractCard: React.FC<SearchContractCardProps> = ({
   address, 
   attestations, 
   onAttest,
-  onSelectAttestation
+  onSelectAttestation,
+  enableLabelsLookup = false,
+  labelChainFilter,
+  groupLabelsByAttester = false
 }) => {
   const [copied, setCopied] = useState(false);
   const [growthePieData, setGrowthePieData] = useState<GrowthePieData | null>(null);
   const [expandedAttestation, setExpandedAttestation] = useState<string | null>(null);
   const [showAllAttestations, setShowAllAttestations] = useState(false);
   const [showChainMatches, setShowChainMatches] = useState(false);
+  const [labelsLoading, setLabelsLoading] = useState(false);
+  const [labelsError, setLabelsError] = useState('');
+  const [labels, setLabels] = useState<LabelItem[]>([]);
     const [ensState, setEnsState] = useState<EnsState>({
     resolution: null,
     loading: false,
     error: null
   });
+  const [attestationMetadataOverrides, setAttestationMetadataOverrides] = useState<Record<string, Attestation>>({});
+  const [attestationMetadataLoading, setAttestationMetadataLoading] = useState<Record<string, boolean>>({});
+  const [attestationMetadataCache, setAttestationMetadataCache] = useState<Record<string, Attestation[]>>({});
   const ensResolution = ensState.resolution;
   const ensName = ensResolution?.name || null;
 
@@ -254,20 +268,109 @@ const SearchContractCard: React.FC<SearchContractCardProps> = ({
 
   const chainMetadata = getChainFromAttestations();
 
-  // Parse attestations with full metadata
-  const parsedAttestations: ParsedAttestation[] = attestations.map(attestation => {
-    return {
-      attester: attestation.attester,
-      timeCreated: Number(attestation.timeCreated),
-      txid: attestation.txid,
-      isOffchain: attestation.isOffchain,
-      revoked: attestation.revoked,
-      tags: buildTagsFromAttestation(attestation),
-      chainId: attestation.chain_id || undefined
-    };
+  const effectiveAttestations = attestations.map(attestation => {
+    return attestationMetadataOverrides[attestation.txid] ?? attestation;
   });
 
+  const labelTagsByAttester = (() => {
+    if (!groupLabelsByAttester || labels.length === 0) {
+      return new Map<string, Tag[]>();
+    }
 
+    const grouped = new Map<string, Tag[]>();
+    labels.forEach(label => {
+      const attesterKey = label.attester ? label.attester.toLowerCase() : 'unknown';
+      const createdAt = Number.isNaN(Date.parse(label.time))
+        ? Math.floor(Date.now() / 1000)
+        : Math.floor(Date.parse(label.time) / 1000);
+      const tag: Tag = {
+        id: `${label.tag_id}-${label.tag_value}-${label.time}-${attesterKey}`,
+        name: `${label.tag_id}: ${label.tag_value}`,
+        category: 'Label',
+        createdAt,
+        rawValue: label.tag_value
+      };
+      const existing = grouped.get(attesterKey) ?? [];
+      existing.push(tag);
+      grouped.set(attesterKey, existing);
+    });
+
+    grouped.forEach((items, key) => {
+      grouped.set(
+        key,
+        items.sort((a, b) => b.createdAt - a.createdAt)
+      );
+    });
+
+    return grouped;
+  })();
+
+  const mergeLabelTags = (tags: Tag[], labelTags: Tag[]) => {
+    const seen = new Set<string>();
+
+    const tagKey = (tag: Tag) => {
+      const parts = tag.name.split(':');
+      const key = parts[0]?.trim() || '';
+      const value = parts.slice(1).join(':').trim();
+      return `${key}:${value.toLowerCase()}`;
+    };
+
+    tags.forEach(tag => {
+      seen.add(tagKey(tag));
+    });
+
+    const merged = [...tags];
+    labelTags.forEach(tag => {
+      const key = tagKey(tag);
+      if (!seen.has(key)) {
+        merged.push(tag);
+        seen.add(key);
+      }
+    });
+
+    return merged;
+  };
+
+  // Parse attestations with full metadata
+  const parsedAttestations: ParsedAttestation[] = (() => {
+    const parsed = effectiveAttestations.map(attestation => {
+      return {
+        attester: attestation.attester,
+        timeCreated: Number(attestation.timeCreated),
+        txid: attestation.txid,
+        isOffchain: attestation.isOffchain,
+        revoked: attestation.revoked,
+        tags: buildTagsFromAttestation(attestation),
+        chainId: attestation.chain_id || undefined,
+        raw: attestation
+      };
+    });
+
+    if (!groupLabelsByAttester || labelTagsByAttester.size === 0) {
+      return parsed;
+    }
+
+    const assignedAttesters = new Set<string>();
+
+    return parsed.map(attestation => {
+      const attesterKey = attestation.attester.toLowerCase();
+      if (assignedAttesters.has(attesterKey)) {
+        return attestation;
+      }
+
+      const labelTags = labelTagsByAttester.get(attesterKey);
+      if (!labelTags || labelTags.length === 0) {
+        return attestation;
+      }
+
+      assignedAttesters.add(attesterKey);
+
+      return {
+        ...attestation,
+        tags: mergeLabelTags(attestation.tags, labelTags)
+      };
+    });
+  })();
 
   const getChainName = useCallback(() => {
     if (growthePieData?.chains && growthePieData.chains.length > 1) {
@@ -279,6 +382,7 @@ const SearchContractCard: React.FC<SearchContractCardProps> = ({
     }
     return chainMetadata?.name || 'Multiple Chains';
   }, [growthePieData, chainMetadata]);
+
 
   // Fetch growthepie data if we have a growthepie attestation
   useEffect(() => {
@@ -360,7 +464,7 @@ const SearchContractCard: React.FC<SearchContractCardProps> = ({
     }
   }, [hasGrowthePieAttestation, address, growthePieData]);
 
-    useEffect(() => {
+  useEffect(() => {
     const fetchEnsName = async () => {
       setEnsState(prev => ({ ...prev, loading: true, error: null }));
       
@@ -385,6 +489,36 @@ const SearchContractCard: React.FC<SearchContractCardProps> = ({
     fetchEnsName();
   }, [address, getChainName]);
 
+  useEffect(() => {
+    if (!enableLabelsLookup) return;
+    setLabels([]);
+    setLabelsError('');
+    setLabelsLoading(false);
+  }, [enableLabelsLookup, labelChainFilter, address]);
+
+  useEffect(() => {
+    if (!enableLabelsLookup || !groupLabelsByAttester) return;
+
+    const loadLabels = async () => {
+      setLabelsLoading(true);
+      setLabelsError('');
+      try {
+        const response = await fetchLabelsForAddress({
+          address,
+          chainId: labelChainFilter || undefined
+        });
+        setLabels(response.labels);
+      } catch (error) {
+        setLabelsError(error instanceof Error ? error.message : 'Failed to load labels');
+        setLabels([]);
+      } finally {
+        setLabelsLoading(false);
+      }
+    };
+
+    loadLabels();
+  }, [address, enableLabelsLookup, groupLabelsByAttester, labelChainFilter]);
+
   // Format functions
   function formatFullAddress(addr: string): string {
     if (!addr) return '';
@@ -397,6 +531,7 @@ const SearchContractCard: React.FC<SearchContractCardProps> = ({
     return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
   };
 
+
   const formatTimestamp = (timestamp: number): string => {
     const date = new Date(timestamp * 1000);
     return date.toLocaleString('en-US', {
@@ -405,6 +540,7 @@ const SearchContractCard: React.FC<SearchContractCardProps> = ({
       year: 'numeric',
     });
   };
+
 
   const formatNumber = (num: number): string => {
     return num.toLocaleString();
@@ -470,6 +606,60 @@ const SearchContractCard: React.FC<SearchContractCardProps> = ({
   const toggleAttestation = (txid: string) => {
     setExpandedAttestation(expandedAttestation === txid ? null : txid);
   };
+
+  const shouldShowLabelStatus = enableLabelsLookup && groupLabelsByAttester;
+
+  const loadAttestationMetadata = async (attestation: ParsedAttestation) => {
+    const placeholderKey = attestation.txid;
+    if (attestationMetadataLoading[placeholderKey]) return;
+
+    setAttestationMetadataLoading(prev => ({ ...prev, [placeholderKey]: true }));
+
+    try {
+      const cacheKey = attestation.chainId || 'all';
+      const cached = attestationMetadataCache[cacheKey];
+      const fullAttestations = cached ?? await searchAttestations({
+        recipient: address,
+        chainId: attestation.chainId,
+        limit: 100
+      });
+
+      if (!cached) {
+        setAttestationMetadataCache(prev => ({ ...prev, [cacheKey]: fullAttestations }));
+      }
+
+      const match = fullAttestations.find(item => {
+        const sameAttester = item.attester.toLowerCase() === attestation.attester.toLowerCase();
+        const sameChain = (item.chain_id || undefined) === attestation.chainId;
+        const timeCreated = Number(item.timeCreated);
+        const timeDiff = Math.abs(timeCreated - attestation.timeCreated);
+        return sameAttester && sameChain && timeDiff <= 5;
+      });
+
+      if (match) {
+        setAttestationMetadataOverrides(prev => ({
+          ...prev,
+          [placeholderKey]: match
+        }));
+      }
+    } catch (error) {
+      console.error('Failed to fetch attestation metadata:', error);
+    } finally {
+      setAttestationMetadataLoading(prev => ({ ...prev, [placeholderKey]: false }));
+    }
+  };
+
+  useEffect(() => {
+    if (!groupLabelsByAttester) return;
+
+    const placeholders = parsedAttestations.filter(attestation => attestation.txid.startsWith('search-'));
+    placeholders.slice(0, 2).forEach(attestation => {
+      if (attestationMetadataOverrides[attestation.txid] || attestationMetadataLoading[attestation.txid]) {
+        return;
+      }
+      loadAttestationMetadata(attestation);
+    });
+  }, [attestationMetadataLoading, attestationMetadataOverrides, groupLabelsByAttester, parsedAttestations]);
 
   return (
     <div 
@@ -791,6 +981,16 @@ const SearchContractCard: React.FC<SearchContractCardProps> = ({
                       Validated by growthepie
                     </span>
                   )}
+                  {shouldShowLabelStatus && labelsLoading && (
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+                      Loading labels...
+                    </span>
+                  )}
+                  {shouldShowLabelStatus && !labelsLoading && labelsError && (
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-50 text-red-600 border border-red-200">
+                      Labels unavailable
+                    </span>
+                  )}
                 </div>
                 {parsedAttestations.length > 1 && (
                   <button
@@ -803,13 +1003,31 @@ const SearchContractCard: React.FC<SearchContractCardProps> = ({
               </div>
               
               <div className="space-y-3 max-h-96 overflow-y-auto">
-                {(showAllAttestations ? parsedAttestations : parsedAttestations.slice(0, 2)).map((attestation) => (
-                  <div key={attestation.txid} className="bg-gray-50 rounded-md p-3 border border-gray-100">
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-2">
-                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800 font-mono">
-                          {formatShortAddress(attestation.attester)}
-                        </span>
+                {(showAllAttestations ? parsedAttestations : parsedAttestations.slice(0, 2)).map((attestation, attestationIndex) => {
+                  const isGrowthepieAttester = attestation.attester.toLowerCase() === GROWTHEPIE_ATTESTER.toLowerCase();
+                  const attesterLabel = isGrowthepieAttester
+                    ? 'labels.growthepie.eth'
+                    : formatShortAddress(attestation.attester);
+                  const isPlaceholder = attestation.txid.startsWith('search-');
+                  const isMetadataLoading = attestationMetadataLoading[attestation.txid];
+
+                  return (
+                    <div
+                      key={`${attestation.txid || attestation.timeCreated}-${attestationIndex}`}
+                      className="bg-gray-50 rounded-md p-3 border border-gray-100"
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <div className="inline-flex items-center gap-2">
+                            <span
+                              className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800 ${
+                                isGrowthepieAttester ? '' : 'font-mono'
+                              }`}
+                              title={attestation.attester}
+                            >
+                              {attesterLabel}
+                            </span>
+                          </div>
                         {attestation.chainId && (
                           <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700">
                             {CHAINS.find(c => c.caip2 === attestation.chainId)?.name || attestation.chainId}
@@ -833,40 +1051,34 @@ const SearchContractCard: React.FC<SearchContractCardProps> = ({
                     
                     {/* Tags preview */}
                     <div className="flex flex-wrap gap-1 mb-2">
-                      {attestation.tags.slice(0, 3).map((tag) => {
+                      {isPlaceholder ? (() => {
+                        const tag = attestation.tags[0];
+                        if (!tag) {
+                          return (
+                            <div className="inline-flex items-center px-2 py-0.5 rounded-md bg-indigo-50 border border-indigo-100">
+                              <span className="text-xs text-gray-500">Includes selected tag.</span>
+                            </div>
+                          );
+                        }
+
                         const keyParts = tag.name.split(':');
                         const key = keyParts[0].trim();
-                        const value = tag.rawValue === true || tag.rawValue === false 
+                        const value = tag.rawValue === true || tag.rawValue === false
                           ? String(tag.rawValue)
                           : tag.rawValue === null
                             ? 'null'
                             : String(tag.rawValue);
-                            
+
                         return (
-                          <div 
-                            key={tag.id}
-                            className="inline-flex items-center px-2 py-0.5 rounded-md bg-indigo-50 border border-indigo-100"
-                          >
-                            <span className="text-xs font-medium text-gray-500 mr-1">{key}:</span>
+                          <div className="inline-flex items-center px-2 py-0.5 rounded-md bg-indigo-50 border border-indigo-100">
+                            <span className="text-xs font-medium text-gray-500 mr-1">includes</span>
+                            <span className="text-xs text-gray-700 mr-1">{key}:</span>
                             <span className="text-xs text-indigo-700">{value}</span>
                           </div>
                         );
-                      })}
-                      {attestation.tags.length > 3 && (
-                        <button
-                          onClick={() => toggleAttestation(attestation.txid)}
-                          className="inline-flex items-center px-2 py-0.5 rounded-md text-xs bg-gray-100 text-gray-500 hover:bg-gray-200"
-                        >
-                          +{attestation.tags.length - 3} more
-                        </button>
-                      )}
-                    </div>
-                    
-                    {/* Expanded tags */}
-                    {expandedAttestation === attestation.txid && attestation.tags.length > 3 && (
-                      <div className="mt-2 pt-2 border-t border-gray-200">
-                        <div className="flex flex-wrap gap-1">
-                          {attestation.tags.slice(3).map((tag) => {
+                      })() : (
+                        <>
+                          {attestation.tags.slice(0, 3).map((tag, tagIndex) => {
                             const keyParts = tag.name.split(':');
                             const key = keyParts[0].trim();
                             const value = tag.rawValue === true || tag.rawValue === false 
@@ -877,7 +1089,42 @@ const SearchContractCard: React.FC<SearchContractCardProps> = ({
                                 
                             return (
                               <div 
-                                key={tag.id}
+                                key={`${tag.id}-${tagIndex}`}
+                                className="inline-flex items-center px-2 py-0.5 rounded-md bg-indigo-50 border border-indigo-100"
+                              >
+                                <span className="text-xs font-medium text-gray-500 mr-1">{key}:</span>
+                                <span className="text-xs text-indigo-700">{value}</span>
+                              </div>
+                            );
+                          })}
+                          {attestation.tags.length > 3 && (
+                            <button
+                              onClick={() => toggleAttestation(attestation.txid)}
+                              className="inline-flex items-center px-2 py-0.5 rounded-md text-xs bg-gray-100 text-gray-500 hover:bg-gray-200"
+                            >
+                              +{attestation.tags.length - 3} more
+                            </button>
+                          )}
+                        </>
+                      )}
+                    </div>
+                    
+                    {/* Expanded tags */}
+                    {!isPlaceholder && expandedAttestation === attestation.txid && attestation.tags.length > 3 && (
+                      <div className="mt-2 pt-2 border-t border-gray-200">
+                        <div className="flex flex-wrap gap-1">
+                          {attestation.tags.slice(3).map((tag, tagIndex) => {
+                            const keyParts = tag.name.split(':');
+                            const key = keyParts[0].trim();
+                            const value = tag.rawValue === true || tag.rawValue === false 
+                              ? String(tag.rawValue)
+                              : tag.rawValue === null
+                                ? 'null'
+                                : String(tag.rawValue);
+                                
+                            return (
+                              <div 
+                                key={`${tag.id}-${tagIndex}`}
                                 className="inline-flex items-center px-2 py-0.5 rounded-md bg-indigo-50 border border-indigo-100"
                               >
                                 <span className="text-xs font-medium text-gray-500 mr-1">{key}:</span>
@@ -891,7 +1138,24 @@ const SearchContractCard: React.FC<SearchContractCardProps> = ({
                     
                     {/* Action buttons */}
                     <div className="flex justify-end gap-2 mt-2">
-                      {attestation.tags.length > 3 && (
+                      {isPlaceholder && (
+                        <button
+                          onClick={() => loadAttestationMetadata(attestation)}
+                          disabled={isMetadataLoading}
+                          className="px-2 py-0.5 text-xs bg-blue-50 text-blue-600 rounded-md border border-blue-100 hover:bg-blue-100 disabled:opacity-60"
+                        >
+                          {isMetadataLoading ? 'Loading...' : 'Load metadata'}
+                        </button>
+                      )}
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(JSON.stringify(attestation.raw, null, 2));
+                        }}
+                        className="px-2 py-0.5 text-xs bg-gray-100 text-gray-600 rounded-md border border-gray-200 hover:bg-gray-200"
+                      >
+                        Copy raw
+                      </button>
+                      {!isPlaceholder && attestation.tags.length > 3 && (
                         <button
                           onClick={() => toggleAttestation(attestation.txid)}
                           className="px-2 py-0.5 text-xs text-gray-600 hover:text-gray-800 flex items-center"
@@ -924,9 +1188,10 @@ const SearchContractCard: React.FC<SearchContractCardProps> = ({
                           Edit/Confirm
                         </button>
                       )}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}

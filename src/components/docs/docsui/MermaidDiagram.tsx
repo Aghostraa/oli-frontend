@@ -96,3 +96,4 @@ const MermaidDiagram: React.FC<MermaidDiagramProps> = ({ chart, className = '' }
 
 export default MermaidDiagram;
 
+
