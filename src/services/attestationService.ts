@@ -61,10 +61,11 @@ export async function searchAttestations(options: {
   contractAddress?: string;
   recipient?: string;
   dataContains?: string;
+  chainId?: string;
   limit?: number;
   cacheBreaker?: { timestamp: number };
 }): Promise<Attestation[]> {
-  const { contractAddress, recipient, dataContains, limit = 50, cacheBreaker } = options;
+  const { contractAddress, recipient, dataContains, chainId, limit = 50, cacheBreaker } = options;
 
   const params: Record<string, string | number | boolean | undefined | null> = {
     limit,
@@ -82,6 +83,10 @@ export async function searchAttestations(options: {
 
   if (dataContains) {
     params.dataContains = dataContains;
+  }
+
+  if (chainId) {
+    params.chainId = chainId;
   }
 
   const { attestations } = await requestAttestations(params);
