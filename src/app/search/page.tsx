@@ -136,6 +136,7 @@ const buildSearchAttestation = (
 
 function SearchContent() {
   const searchParams = useSearchParams();
+  const searchParamsString = searchParams?.toString() ?? '';
 
   const [searchMode, setSearchMode] = useState<'tag' | 'address'>('tag');
   const [tagId, setTagId] = useState('owner_project');
@@ -234,7 +235,7 @@ function SearchContent() {
       return;
     }
 
-    const effectiveLimit = requestedLimit ?? limit;
+    const effectiveLimit = clampLimit(requestedLimit ?? 10);
 
     setIsLoading(true);
     setHasSearched(true);
@@ -258,17 +259,14 @@ function SearchContent() {
     } finally {
       setIsLoading(false);
     }
-  }, [limit]);
+  }, []);
 
   useEffect(() => {
-    if (!searchParams) {
-      return;
-    }
-
-    const addressParam = searchParams.get('address') || searchParams.get('contract');
-    const tagIdParam = searchParams.get('tag_id');
-    const chainParam = searchParams.get('chain') || searchParams.get('chainId') || searchParams.get('chain_id');
-    const limitParam = searchParams.get('limit');
+    const params = new URLSearchParams(searchParamsString);
+    const addressParam = params.get('address') || params.get('contract');
+    const tagIdParam = params.get('tag_id');
+    const chainParam = params.get('chain') || params.get('chainId') || params.get('chain_id');
+    const limitParam = params.get('limit');
     const normalizedChain = chainParam ? normalizeChain(chainParam) : null;
     const parsedLimit = limitParam ? Number(limitParam) : 10;
     const safeLimit = clampLimit(parsedLimit);
@@ -293,7 +291,7 @@ function SearchContent() {
       return;
     }
 
-    const tagValueParam = searchParams.get('tag_value') || '';
+    const tagValueParam = params.get('tag_value') || '';
     setSearchMode('tag');
     setTagId(tagIdParam);
     setTagValue(tagValueParam);
@@ -304,7 +302,7 @@ function SearchContent() {
       chainId: normalizedChain || undefined,
       limit: safeLimit
     });
-  }, [searchParams, executeSearch, executeAddressSearch]);
+  }, [searchParamsString, executeSearch, executeAddressSearch]);
 
   const handleSearch = () => {
     if (searchMode === 'address') {
