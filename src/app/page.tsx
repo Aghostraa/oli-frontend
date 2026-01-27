@@ -575,7 +575,7 @@ const HomePage: FC = () => {
               Search Contracts
             </h3>
             <p className="text-gray-600 mb-4 flex-grow">
-              Explore and discover labeled smart contracts. Find detailed information about EVM addresses.
+              Explore and discover labeled smart contracts. Find detailed information about EVM/non-EVM addresses.
             </p>
             <div className="mt-auto flex items-center text-indigo-600 text-sm font-medium">
               Search now

@@ -12,7 +12,7 @@ import { Trash2, Plus, Upload, Download, Save, X } from 'lucide-react';
 import { CHAIN_OPTIONS } from '../../constants/chains';
 import { getNetworkConfig, isSupportedAttestationChain } from '../../constants/eas';
 import { VALID_CATEGORY_IDS } from '../../constants/categories';
-import { validateAddress, validateChain, validateCategory, validateBoolean } from '../../utils/validation';
+import { validateAddress, validateAddressForChain, validateChain, validateCategory, validateBoolean } from '../../utils/validation';
 import { prepareTags, prepareEncodedData, switchToAttestationNetwork, initializeEAS, canUseSponsoredTransaction, createSponsoredBulkAttestation, FRONTEND_ATTESTATION_RECIPIENT } from '../../utils/attestationUtils';
 import { parseCaip10 } from '../../utils/caipUtils';
 import { NotificationType, ConfirmationData, RowData, ColumnDefinition, AttestationResult, FieldValue, ValidationWarning } from '../../types/attestation';
@@ -358,8 +358,12 @@ const BulkAttestationForm: React.FC<BulkAttestationFormProps> = ({
     if (column) {
       if (column.required && !resolvedValue) {
         newErrors[errorKey] = `${column.name} is required`;
-      } else if (column.validator) {
-        const validationError = column.validator(resolvedValue);
+      } else {
+        const validationError = column.id === 'address'
+          ? validateAddressForChain(resolvedValue, newRows[index].chain_id)
+          : column.validator
+            ? column.validator(resolvedValue)
+            : null;
         if (validationError) {
           newErrors[errorKey] = validationError;
         }
@@ -440,12 +444,14 @@ const BulkAttestationForm: React.FC<BulkAttestationFormProps> = ({
         }
 
         // Run field-specific validation
-        if (column.validator) {
-          const validationError = column.validator(value);
-          if (validationError) {
-            newErrors[errorKey] = validationError;
-            isValid = false;
-          }
+        const validationError = column.id === 'address'
+          ? validateAddressForChain(value, row.chain_id)
+          : column.validator
+            ? column.validator(value)
+            : null;
+        if (validationError) {
+          newErrors[errorKey] = validationError;
+          isValid = false;
         }
 
         // Special validation for owner_project

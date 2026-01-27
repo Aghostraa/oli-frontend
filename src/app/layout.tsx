@@ -33,7 +33,7 @@ export const metadata: Metadata = {
   twitter: {
     card: 'summary_large_image',
     title: 'Open Labels Initiative',
-    description: 'A standardized framework and data model for EVM address labeling',
+    description: 'A standardized framework and data model for EVM/non-EVM address labeling',
     creator: '@open_labels',
     images: ['/og-image.png'],
   },

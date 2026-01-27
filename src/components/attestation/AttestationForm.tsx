@@ -16,6 +16,7 @@ import { formFields, initialFormState } from '../../constants/formFields';
 import { FormMode, FieldValue, NotificationType, ConfirmationData } from '../../types/attestation';
 import { prepareTags, prepareEncodedData, switchToAttestationNetwork, initializeEAS, canUseSponsoredTransaction, createSponsoredAttestation, FRONTEND_ATTESTATION_RECIPIENT } from '../../utils/attestationUtils';
 import { parseCaip10 } from '../../utils/caipUtils';
+import { validateAddressForChain } from '../../utils/validation';
 
 // Dynamic wallet integration
 import { useDynamicContext } from '@dynamic-labs/sdk-react-core';
@@ -219,8 +220,9 @@ const AttestationForm: React.FC<AttestationFormProps> = ({
 
     getVisibleFields().forEach(field => {
       if (field.validator) {
-        // This line now works correctly with our improved types
-        const error = field.validator(formData[field.id]);
+        const error = field.id === 'address'
+          ? validateAddressForChain(formData[field.id], formData.chain_id as string | undefined)
+          : field.validator(formData[field.id]);
 
         if (error) {
           newErrors[field.id] = error;
