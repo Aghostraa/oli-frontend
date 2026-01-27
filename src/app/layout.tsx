@@ -13,10 +13,10 @@ const siteUrl = process.env.NEXT_PUBLIC_BASE_URL || 'https://openlabelsinitiativ
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
   title: 'Open Labels Initiative',
-  description: 'A standardized framework and data model for EVM address labeling',
+  description: 'A standardized framework and data model for EVM/non-EVM address labeling',
   openGraph: {
     title: 'Open Labels Initiative',
-    description: 'A standardized framework and data model for EVM address labeling',
+    description: 'A standardized framework and data model for EVM/non-EVM address labeling',
     url: siteUrl,
     siteName: 'Open Labels Initiative',
     images: [
